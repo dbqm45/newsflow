@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>NEWSFLOW – projekt UI</title>
+<style>
+:root{
+  --bg:#09090C; --s1:#131318; --s2:#1C1C23; --s3:#26262F; --line:#2A2A33;
+  --t1:#F4F4F6; --t2:#A3A3AE; --t3:#6B6B76;
+  --acc:#7C5CFF; --acc2:#A594FF; --hot:#FF6B4A; --ok:#3DDC97; --warn:#FFB547;
+  --r:14px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#2b2b33;font-family:Inter,system-ui,sans-serif;color:var(--t1);padding:40px;display:flex;flex-wrap:wrap;gap:40px;-webkit-font-smoothing:antialiased}
+.phone{width:390px;height:844px;background:var(--bg);border-radius:48px;position:relative;overflow:hidden;box-shadow:0 0 0 10px #000,0 30px 80px rgba(0,0,0,.5)}
+.status{height:54px;display:flex;justify-content:space-between;align-items:center;padding:14px 32px 0;font:600 16px Inter;position:relative;z-index:5}
+.island{position:absolute;left:50%;top:11px;width:124px;height:36px;background:#000;border-radius:20px;transform:translateX(-50%)}
+.sicons{display:flex;gap:6px;align-items:center}
+.bat{width:26px;height:12px;border:1.5px solid var(--t1);border-radius:4px;position:relative}.bat:after{content:"";position:absolute;inset:1.5px;right:5px;background:var(--t1);border-radius:1.5px}
+.scroll{position:absolute;top:54px;left:0;right:0;bottom:0;overflow:hidden;padding:0 16px}
+h1{font:800 28px 'Inter Display',Inter;letter-spacing:-.6px}
+h2{font:700 21px 'Inter Display',Inter;letter-spacing:-.3px;margin:22px 0 12px}
+.row{display:flex;align-items:center}
+.sp{flex:1}
+.muted{color:var(--t2)} .dim{color:var(--t3)}
+.chip{padding:7px 14px;border-radius:999px;background:var(--s2);font:500 13px Inter;white-space:nowrap}
+.chip.on{background:var(--acc);color:#fff}
+.chips{display:flex;gap:8px;margin:14px 0 4px}
+.avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#FF6B4A,#7C5CFF);display:grid;place-items:center;font:700 14px Inter}
+/* okładki */
+.cover{border-radius:10px;position:relative;overflow:hidden;flex:none;display:flex;flex-direction:column;justify-content:flex-end;padding:10px;color:#fff}
+.cover b{font:900 20px/0.95 'Inter Display',Inter;letter-spacing:-.5px;text-transform:uppercase;position:relative;z-index:2}
+.cover i{font:600 9px Inter;font-style:normal;letter-spacing:1.5px;opacity:.85;position:relative;z-index:2;margin-bottom:4px}
+.cover:before,.cover:after{content:"";position:absolute;border-radius:50%;filter:blur(.5px)}
+.cover:before{width:70%;height:70%;right:-18%;top:-18%;background:rgba(255,255,255,.18)}
+.cover:after{width:40%;height:40%;left:-10%;top:30%;background:rgba(0,0,0,.18)}
+.g-daily{background:linear-gradient(140deg,#7C5CFF 0%,#3B1FA8 55%,#120A33 100%)}
+.g-llm{background:linear-gradient(140deg,#8E7CFF,#4B2BD6)}
+.g-agents{background:linear-gradient(140deg,#21D4B4,#0B6D78)}
+.g-tools{background:linear-gradient(140deg,#FFB547,#E5562E)}
+.g-research{background:linear-gradient(140deg,#4AA8FF,#1C3FA8)}
+.g-policy{background:linear-gradient(140deg,#FF6B8A,#9E1F5C)}
+.g-os{background:linear-gradient(140deg,#B6F25B,#2E8B3A)}
+.g-voice{background:linear-gradient(140deg,#FF8FD8,#7A2BBF)}
+.wave{position:absolute;left:10px;top:12px;display:flex;gap:3px;align-items:center;z-index:2}
+.wave span{width:4px;border-radius:2px;background:#fff;opacity:.9}
+/* hero */
+.hero{border-radius:20px;padding:16px;background:linear-gradient(160deg,#2A1D6E 0%,#16121F 70%);display:flex;gap:14px;margin-top:14px;position:relative}
+.play{width:52px;height:52px;border-radius:50%;background:var(--acc);display:grid;place-items:center;box-shadow:0 8px 24px rgba(124,92,255,.45);flex:none}
+.play.lg{width:60px;height:60px}
+.play.white{background:#fff;box-shadow:none}
+.tri{width:0;height:0;border-left:16px solid #fff;border-top:10px solid transparent;border-bottom:10px solid transparent;margin-left:4px}
+.play.white .tri{border-left-color:#000}
+.pause{display:flex;gap:5px}.pause span{width:6px;height:20px;background:#000;border-radius:2px}
+.badge{font:700 10px Inter;letter-spacing:1px;text-transform:uppercase;padding:3px 7px;border-radius:6px;background:rgba(255,255,255,.12)}
+.hot{color:var(--hot)}
+/* listy */
+.track{display:flex;gap:12px;align-items:center;padding:9px 0}
+.track .t{font:600 15px Inter;line-height:1.25}
+.track .m{font:400 12.5px Inter;color:var(--t2);margin-top:3px}
+.dots{color:var(--t3);font:700 16px Inter;letter-spacing:1px}
+.score{font:700 11px Inter;padding:3px 7px;border-radius:6px;background:rgba(61,220,151,.14);color:var(--ok)}
+.score.mid{background:rgba(255,181,71,.14);color:var(--warn)}
+.carousel{display:flex;gap:12px;overflow:hidden}
+.card .ct{font:600 13px Inter;margin-top:8px;line-height:1.25}
+.card .cm{font:400 12px Inter;color:var(--t2);margin-top:2px}
+/* mini player + tab bar */
+.mini{position:absolute;left:8px;right:8px;bottom:92px;height:58px;border-radius:12px;background:#2C2152;display:flex;align-items:center;gap:10px;padding:0 10px 0 8px;z-index:6}
+.mini .bar{position:absolute;left:10px;right:10px;bottom:0;height:2px;background:rgba(255,255,255,.2);border-radius:2px}
+.mini .bar:after{content:"";position:absolute;left:0;top:0;bottom:0;width:38%;background:#fff;border-radius:2px}
+.tabs{position:absolute;left:0;right:0;bottom:0;height:88px;background:linear-gradient(to top,#09090C 60%,rgba(9,9,12,0));display:flex;justify-content:space-around;padding-top:20px;z-index:5}
+.tab{display:flex;flex-direction:column;align-items:center;gap:5px;font:500 10.5px Inter;color:var(--t3)}
+.tab.on{color:var(--t1)}
+.ic{width:24px;height:24px}
+.home-ind{position:absolute;bottom:8px;left:50%;width:134px;height:5px;border-radius:3px;background:#fff;transform:translateX(-50%);z-index:7}
+/* now playing */
+.np{background:linear-gradient(180deg,#3A2A8C 0%,#1A1440 45%,#09090C 85%)}
+.prog{height:4px;border-radius:2px;background:rgba(255,255,255,.22);position:relative}
+.prog:after{content:"";position:absolute;left:0;top:0;bottom:0;width:38%;background:#fff;border-radius:2px}
+.knob{position:absolute;left:38%;top:-4px;width:12px;height:12px;border-radius:50%;background:#fff;transform:translateX(-50%)}
+.ctrl{display:flex;justify-content:space-between;align-items:center;margin-top:18px;padding:0 6px}
+.lyr{border-radius:16px;background:#5B3FD9;padding:18px 18px;margin-top:22px}
+.lyr p{font:700 19px/1.35 'Inter Display',Inter;letter-spacing:-.2px;margin-bottom:12px;color:rgba(255,255,255,.45)}
+.lyr p.now{color:#fff}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:999px;background:rgba(255,255,255,.12);font:600 12px Inter}
+.src{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:8px;background:var(--s2);font:500 12px Inter;margin:0 6px 6px 0}
+.src i{width:16px;height:16px;border-radius:4px;display:inline-block}
+.kp{display:flex;gap:10px;margin:8px 0;font:400 14.5px/1.45 Inter;color:#DADAE0}
+.kp:before{content:"";width:6px;height:6px;border-radius:50%;background:var(--acc2);margin-top:8px;flex:none}
+.reading{font:400 16px/1.6 Inter;color:var(--t2)}
+.reading mark{background:rgba(124,92,255,.28);color:#fff;border-radius:4px;padding:1px 2px}
+.search{height:44px;border-radius:10px;background:#fff;color:#111;display:flex;align-items:center;gap:10px;padding:0 14px;font:500 15px Inter;margin-top:14px}
+.seg{display:flex;background:var(--s2);border-radius:10px;padding:3px;margin-top:12px}
+.seg div{flex:1;text-align:center;padding:7px 0;border-radius:8px;font:600 13px Inter;color:var(--t2)}
+.seg .on{background:var(--s3);color:#fff}
+.caption{width:390px;font:600 15px Inter;color:#d8d8e0;margin-top:14px;text-align:center}
+.wrap{display:flex;flex-direction:column;align-items:center}
+.cardp{background:var(--s1);border-radius:16px;padding:14px}
+.voices .v{display:flex;align-items:center;gap:12px;background:var(--s1);border-radius:14px;padding:12px;margin-bottom:10px}
+.stars{color:var(--warn);font-size:13px;letter-spacing:1px}
+</style>
+</head>
+<body>
+
+<!-- ================= 1. DZIŚ ================= -->
+<div class="wrap"><div class="phone" id="s1">
+  <div class="status"><span>8:04</span><div class="island"></div><div class="sicons">●●● <div class="bat"></div></div></div>
+  <div class="scroll">
+    <div class="row" style="margin-top:6px"><div class="avatar">M</div><div style="margin-left:12px"><div class="muted" style="font:500 13px Inter">Piątek, 20 listopada</div><h1>Dzień dobry</h1></div></div>
+    <div class="chips"><span class="chip on">Wszystko</span><span class="chip">Audycje</span><span class="chip">Tematy</span><span class="chip">Zapisane</span></div>
+
+    <div class="hero">
+      <div class="cover g-daily" style="width:118px;height:118px"><div class="wave"><span style="height:10px"></span><span style="height:18px"></span><span style="height:26px"></span><span style="height:14px"></span><span style="height:20px"></span></div><i>20.11</i><b>AI<br>Daily</b></div>
+      <div style="display:flex;flex-direction:column;min-width:0">
+        <span class="badge" style="align-self:flex-start;color:var(--acc2)">Nowe · 7:25</span>
+        <div style="font:700 17px/1.25 'Inter Display';margin-top:8px">Agenci w przeglądarce stają się standardem</div>
+        <div class="muted" style="font:400 12.5px Inter;margin-top:5px">8 tematów · 12 min · 41 źródeł</div>
+        <div class="sp"></div>
+        <div class="row" style="gap:10px"><div class="play"><div class="tri"></div></div><span class="pill">Czytaj</span><span class="pill">+</span></div>
+      </div>
+    </div>
+
+    <h2>Tematy dnia</h2>
+    <div class="carousel">
+      <div class="card"><div class="cover g-agents" style="width:140px;height:140px"><i>2 MIN · 4 ŹRÓDŁA</i><b>Agenci</b></div><div class="ct">Przeglądarka z agentem dla wszystkich</div><div class="cm">Najważniejsze dziś</div></div>
+      <div class="card"><div class="cover g-llm" style="width:140px;height:140px"><i>1:40 · 3 ŹRÓDŁA</i><b>LLM</b></div><div class="ct">Nowy model open-weight bije GPT-4o</div><div class="cm">Deklaracja producenta</div></div>
+      <div class="card"><div class="cover g-tools" style="width:140px;height:140px"><i>1:20</i><b>Narzę&shy;dzia</b></div><div class="ct">n8n dodaje węzeł MCP</div></div>
+    </div>
+
+    <h2>Krótkie odsłuchy</h2>
+    <div class="track"><div class="cover g-policy" style="width:52px;height:52px;padding:6px"><b style="font-size:10px">AI Act</b></div><div style="flex:1;min-width:0"><div class="t">UE publikuje wytyczne dla modeli ogólnego przeznaczenia</div><div class="m">Regulacje · 1:55 · <span class="score">7,8</span></div></div><span class="dots">⋯</span></div>
+  </div>
+  <div class="mini"><div class="cover g-daily" style="width:42px;height:42px;padding:4px;border-radius:7px"><b style="font-size:8px">AI Daily</b></div><div style="flex:1;min-width:0"><div style="font:600 13.5px Inter">Agenci w przeglądarce</div><div style="font:400 12px Inter;color:#C9C2F5">Rozdział 2 z 8 · AI Daily</div></div><div class="pause" style="gap:4px;margin-right:6px"><span style="background:#fff;width:4px;height:16px"></span><span style="background:#fff;width:4px;height:16px"></span></div><div class="bar"></div></div>
+  <div class="tabs">
+    <div class="tab on"><svg class="ic" viewBox="0 0 24 24" fill="#fff"><path d="M12 3 3 10v11h6v-6h6v6h6V10z"/></svg>Dziś</div>
+    <div class="tab"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#6B6B76" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>Szukaj</div>
+    <div class="tab"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#6B6B76" stroke-width="2"><path d="M4 4v16M9 4v16M14 4l6 16"/></svg>Biblioteka</div>
+    <div class="tab"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#6B6B76" stroke-width="2"><circle cx="12" cy="12" r="2"/><path d="M7 7a7 7 0 0 0 0 10M17 7a7 7 0 0 1 0 10"/></svg>Źródła</div>
+  </div>
+  <div class="home-ind"></div>
+</div><div class="caption">1 · Dziś — briefing dnia + tematy jak „playlisty”</div></div>
+
+<!-- ================= 2. BRIEFING (lista tematów) ================= -->
+<div class="wrap"><div class="phone" id="s2">
+  <div style="position:absolute;inset:0 0 auto 0;height:420px;background:linear-gradient(180deg,#4B33C9 0%,#09090C 100%)"></div>
+  <div class="status"><span>8:05</span><div class="island"></div><div class="sicons">●●● <div class="bat"></div></div></div>
+  <div class="scroll">
+    <div style="font:700 22px Inter;margin-top:4px">‹</div>
+    <div style="display:flex;justify-content:center;margin-top:4px"><div class="cover g-daily" style="width:200px;height:200px;padding:16px;box-shadow:0 20px 50px rgba(0,0,0,.5)"><div class="wave" style="left:16px;top:18px"><span style="height:14px"></span><span style="height:28px"></span><span style="height:40px"></span><span style="height:22px"></span><span style="height:32px"></span><span style="height:16px"></span></div><i style="font-size:11px">PIĄTEK · 20.11.2026</i><b style="font-size:36px">AI<br>Daily</b></div></div>
+    <div style="font:800 23px/1.2 'Inter Display';margin-top:18px">Agenci w przeglądarce stają się standardem</div>
+    <div class="row muted" style="font:500 13px Inter;margin-top:8px;gap:6px"><span style="color:var(--acc2)">✦</span> NEWSFLOW · głos AI · 12 min · 64 przeanalizowane</div>
+    <div class="row" style="margin-top:12px;gap:18px;font:600 20px Inter;color:var(--t2)"><span>♡</span><span>⤓</span><span>↗</span><span>⋯</span><div class="sp"></div><span style="font:500 13px Inter" class="pill">1,25×</span><div class="play lg"><div class="tri"></div></div></div>
+
+    <div style="margin-top:14px">
+      <div class="track"><div style="width:22px;text-align:center;color:var(--acc2);font:700 14px Inter">▮▮</div><div style="flex:1"><div class="t" style="color:var(--acc2)">Intro · zapowiedź dnia</div><div class="m">0:48</div></div></div>
+      <div class="track"><div style="width:22px;text-align:center" class="muted">1</div><div style="flex:1"><div class="t">Przeglądarka z agentem dla wszystkich</div><div class="m"><span class="hot">● Najważniejsze</span> · 4 źródła · 2:10</div></div><span class="dots">⋯</span></div>
+      <div class="track"><div style="width:22px;text-align:center" class="muted">2</div><div style="flex:1"><div class="t">Model open-weight bije GPT-4o w kodowaniu</div><div class="m">LLM · deklaracja producenta · 1:40</div></div><span class="dots">⋯</span></div>
+      <div class="track"><div style="width:22px;text-align:center" class="muted">3</div><div style="flex:1"><div class="t">UE: wytyczne dla modeli ogólnego przeznaczenia</div><div class="m">Regulacje · 2 źródła · 1:55</div></div><span class="dots">⋯</span></div>
+      <div class="track"><div style="width:22px;text-align:center" class="muted">4</div><div style="flex:1"><div class="t">n8n dodaje węzeł MCP</div><div class="m">Narzędzia · 1:20</div></div><span class="dots">⋯</span></div>
+    </div>
+  </div>
+  <div class="home-ind"></div>
+</div><div class="caption">2 · Briefing jak album — tematy to „utwory”</div></div>
+
+<!-- ================= 3. ODTWARZACZ ================= -->
+<div class="wrap"><div class="phone np" id="s3">
+  <div class="status"><span>8:06</span><div class="island"></div><div class="sicons">●●● <div class="bat"></div></div></div>
+  <div class="scroll">
+    <div class="row" style="margin-top:4px"><span style="font:700 20px Inter">⌄</span><div class="sp" style="text-align:center"><div class="dim" style="font:600 10.5px Inter;letter-spacing:1.5px;color:#C9C2F5">ODTWARZANE Z BRIEFINGU</div><div style="font:700 13px Inter">AI Daily · 20 listopada</div></div><span class="dots">⋯</span></div>
+    <div style="display:flex;justify-content:center;margin-top:26px"><div class="cover g-agents" style="width:340px;height:340px;border-radius:14px;padding:22px;box-shadow:0 30px 60px rgba(0,0,0,.45)"><i style="font-size:12px">ROZDZIAŁ 2 Z 8 · 4 ŹRÓDŁA</i><b style="font-size:54px">Agenci</b></div></div>
+    <div class="row" style="margin-top:26px"><div style="flex:1;min-width:0"><div style="font:800 21px/1.2 'Inter Display'">Przeglądarka z agentem dla wszystkich</div><div style="font:500 14px Inter;color:#C9C2F5;margin-top:4px">NEWSFLOW · głos AI</div></div><span style="font:600 24px Inter;color:var(--ok)">⊕</span></div>
+    <div class="prog" style="margin-top:20px"><div class="knob"></div></div>
+    <div class="row" style="font:500 11.5px Inter;color:#C9C2F5;margin-top:8px"><span>4:42</span><div class="sp"></div><span>-6:01</span></div>
+    <div class="ctrl"><span style="font:700 15px Inter" class="pill">1,25×</span><span style="font:700 26px Inter">⏮</span><div class="play white" style="width:68px;height:68px"><div class="pause"><span></span><span></span></div></div><span style="font:700 26px Inter">⏭</span><span style="font:600 13px Inter" class="pill">↻30</span></div>
+    <div class="row" style="margin-top:22px;font:500 12.5px Inter;color:#C9C2F5"><span>🎧 AirPods</span><div class="sp"></div><span>Rozdziały</span><span style="margin-left:16px">Kolejka</span></div>
+    <div class="lyr" style="padding:14px 18px"><div style="font:700 13px Inter;margin-bottom:8px">Tekst</div><p class="now" style="font-size:16px;margin:0">Od dziś agent w przeglądarce jest dostępny dla wszystkich użytkowników…</p></div>
+  </div>
+  <div class="home-ind"></div>
+</div><div class="caption">3 · Odtwarzacz — okładka tematu, tempo, rozdziały</div></div>
+
+<!-- ================= 4. TEKST (jak „lyrics”) ================= -->
+<div class="wrap"><div class="phone" id="s4" style="background:#5B3FD9">
+  <div class="status"><span>8:06</span><div class="island"></div><div class="sicons">●●● <div class="bat"></div></div></div>
+  <div class="scroll">
+    <div class="row" style="margin-top:4px"><span style="font:700 20px Inter">⌄</span><div class="sp" style="text-align:center"><div style="font:700 13px Inter">Przeglądarka z agentem dla wszystkich</div><div style="font:500 12px Inter;color:#DCD4FF">Rozdział 2 · Tekst</div></div><span class="dots" style="color:#fff">⋯</span></div>
+    <div style="margin-top:26px">
+      <p style="font:700 23px/1.35 'Inter Display';color:rgba(255,255,255,.45);margin-bottom:16px">Zostańmy przy najważniejszym temacie dnia.</p>
+      <p style="font:700 23px/1.35 'Inter Display';color:#fff;margin-bottom:16px">Od dziś agent w przeglądarce jest dostępny dla wszystkich użytkowników, nie tylko w planie płatnym.</p>
+      <p style="font:700 23px/1.35 'Inter Display';color:rgba(255,255,255,.55);margin-bottom:16px">Według producenta potrafi samodzielnie wypełniać formularze, porównywać oferty i rezerwować spotkania.</p>
+      <p style="font:700 23px/1.35 'Inter Display';color:rgba(255,255,255,.55);margin-bottom:16px">To deklaracja firmy — niezależnych testów skuteczności jeszcze nie ma.</p>
+      <p style="font:700 23px/1.35 'Inter Display';color:rgba(255,255,255,.55)">Dla praktyków najważniejsze jest co innego…</p>
+    </div>
+  </div>
+  <div style="position:absolute;left:0;right:0;bottom:0;padding:16px 20px 34px;background:linear-gradient(to top,#4A30C0 70%,rgba(91,63,217,0))">
+    <div class="prog"><div class="knob"></div></div>
+    <div class="row" style="margin-top:16px;justify-content:center;gap:40px"><span style="font:700 22px Inter">⏮</span><div class="play white" style="width:56px;height:56px"><div class="pause"><span></span><span></span></div></div><span style="font:700 22px Inter">⏭</span></div>
+  </div>
+  <div class="home-ind"></div>
+</div><div class="caption">4 · Tekst podświetlany w czasie czytania (jak „lyrics”)</div></div>
+
+<!-- ================= 5. TEMAT (czytaj + słuchaj) ================= -->
+<div class="wrap"><div class="phone" id="s5">
+  <div style="position:absolute;inset:0 0 auto 0;height:300px;background:linear-gradient(180deg,#0E6E70 0%,#09090C 100%)"></div>
+  <div class="status"><span>8:10</span><div class="island"></div><div class="sicons">●●● <div class="bat"></div></div></div>
+  <div class="scroll">
+    <div class="row" style="margin-top:4px;font:700 20px Inter"><span>‹</span><div class="sp"></div><span style="font-size:18px">♡ &nbsp;↗</span></div>
+    <div class="row" style="gap:8px;margin-top:14px"><span class="badge hot" style="background:rgba(255,107,74,.15)">Najważniejsze</span><span class="badge">Agenci AI</span></div>
+    <div style="font:800 25px/1.18 'Inter Display';margin-top:10px">Przeglądarka z agentem dla wszystkich</div>
+    <div class="row" style="gap:8px;margin-top:12px"><span class="score">ważność 8,4</span><span class="score">wiarygodność 8</span><span class="score mid">4 źródła</span></div>
+    <div class="row" style="gap:12px;margin-top:16px"><div class="play"><div class="tri"></div></div><div><div style="font:600 14px Inter">Odsłuchaj temat</div><div class="muted" style="font:400 12px Inter">2:10 · głos AI</div></div></div>
+    <div class="reading" style="margin-top:18px">Producent udostępnił agenta wszystkim użytkownikom przeglądarki. <mark>Według firmy agent samodzielnie wypełnia formularze i porównuje oferty</mark> — niezależnych testów jeszcze nie ma.</div>
+    <h2 style="font-size:17px;margin-top:18px">Najważniejsze punkty</h2>
+    <div class="kp">Bezpłatny dostęp od dziś, na początek w USA i UE</div>
+    <div class="kp">Działa na stronach bez API — ryzyko dla tradycyjnej automatyzacji RPA</div>
+    <h2 style="font-size:17px;margin-top:16px">Źródła</h2>
+    <div><span class="src"><i style="background:#7C5CFF"></i>Blog producenta</span><span class="src"><i style="background:#FFB547"></i>The Verge</span><span class="src"><i style="background:#3DDC97"></i>Simon Willison</span><span class="src"><i style="background:#FF6B8A"></i>Newsletter</span></div>
+  </div>
+  <div class="mini" style="bottom:28px;background:#0E4F51"><div class="cover g-agents" style="width:42px;height:42px;padding:4px;border-radius:7px"><b style="font-size:8px">Agenci</b></div><div style="flex:1"><div style="font:600 13.5px Inter">Przeglądarka z agentem…</div><div style="font:400 12px Inter;color:#B8E8E3">1:02 / 2:10</div></div><div class="pause" style="gap:4px;margin-right:6px"><span style="background:#fff;width:4px;height:16px"></span><span style="background:#fff;width:4px;height:16px"></span></div><div class="bar"></div></div>
+  <div class="home-ind"></div>
+</div><div class="caption">5 · Temat — czytaj i słuchaj w jednym miejscu</div></div>
+
+<!-- ================= 6. SZUKAJ / WIADOMOŚCI ================= -->
+<div class="wrap"><div class="phone" id="s6">
+  <div class="status"><span>8:12</span><div class="island"></div><div class="sicons">●●● <div class="bat"></div></div></div>
+  <div class="scroll">
+    <h1 style="margin-top:6px">Szukaj</h1>
+    <div class="search"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>Czego chcesz posłuchać?</div>
+    <h2 style="font-size:17px">Przeglądaj kategorie</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="cover g-llm" style="height:96px;padding:12px;justify-content:flex-start"><b style="font-size:17px;text-transform:none">Modele LLM</b></div>
+      <div class="cover g-agents" style="height:96px;padding:12px;justify-content:flex-start"><b style="font-size:17px;text-transform:none">Agenci AI</b></div>
+      <div class="cover g-tools" style="height:96px;padding:12px;justify-content:flex-start"><b style="font-size:17px;text-transform:none">Narzędzia</b></div>
+      <div class="cover g-research" style="height:96px;padding:12px;justify-content:flex-start"><b style="font-size:17px;text-transform:none">Badania</b></div>
+      <div class="cover g-os" style="height:96px;padding:12px;justify-content:flex-start"><b style="font-size:17px;text-transform:none">Open source</b></div>
+      <div class="cover g-policy" style="height:96px;padding:12px;justify-content:flex-start"><b style="font-size:17px;text-transform:none">Regulacje</b></div>
+    </div>
+    <h2 style="font-size:17px">Najnowsze</h2>
+    <div class="track"><div class="cover g-research" style="width:48px;height:48px;padding:5px"><b style="font-size:9px">arXiv</b></div><div style="flex:1;min-width:0"><div class="t">Mniejsze modele uczą się planowania</div><div class="m">Import AI · 2 godz. · <span class="score">7,1</span></div></div></div>
+  </div>
+  <div class="tabs">
+    <div class="tab"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#6B6B76" stroke-width="2"><path d="M12 3 3 10v11h6v-6h6v6h6V10z"/></svg>Dziś</div>
+    <div class="tab on"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>Szukaj</div>
+    <div class="tab"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#6B6B76" stroke-width="2"><path d="M4 4v16M9 4v16M14 4l6 16"/></svg>Biblioteka</div>
+    <div class="tab"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#6B6B76" stroke-width="2"><circle cx="12" cy="12" r="2"/><path d="M7 7a7 7 0 0 0 0 10M17 7a7 7 0 0 1 0 10"/></svg>Źródła</div>
+  </div>
+  <div class="home-ind"></div>
+</div><div class="caption">6 · Szukaj — kategorie jako kolorowe kafle</div></div>
+
+<!-- ================= 7. BIBLIOTEKA ================= -->
+<div class="wrap"><div class="phone" id="s7">
+  <div class="status"><span>8:15</span><div class="island"></div><div class="sicons">●●● <div class="bat"></div></div></div>
+  <div class="scroll">
+    <div class="row" style="margin-top:6px"><div class="avatar">M</div><h1 style="margin-left:12px;font-size:24px">Twoja biblioteka</h1><div class="sp"></div><span style="font:400 26px Inter">+</span></div>
+    <div class="chips"><span class="chip on">Audycje</span><span class="chip">Zapisane</span><span class="chip">Kolejka</span><span class="chip">Źródła</span></div>
+    <div class="row muted" style="font:600 13px Inter;margin:10px 0 4px">⇅ Ostatnio słuchane</div>
+    <div class="track"><div class="cover" style="width:58px;height:58px;padding:6px;background:linear-gradient(140deg,#3DDC97,#7C5CFF)"><b style="font-size:10px">Zapi&shy;sane</b></div><div style="flex:1"><div class="t">Zapisane materiały</div><div class="m">📌 Lista · 23 materiały</div></div></div>
+    <div class="track"><div class="cover g-daily" style="width:58px;height:58px;padding:6px"><b style="font-size:10px">AI Daily</b></div><div style="flex:1"><div class="t">Agenci w przeglądarce…</div><div class="m">Pt 20.11 · 12 min · <span style="color:var(--acc2)">trwa · zostało 6 min</span></div><div class="prog" style="height:3px;margin-top:7px;width:70%"></div></div></div>
+    <div class="track"><div class="cover g-daily" style="width:58px;height:58px;padding:6px;filter:hue-rotate(40deg)"><b style="font-size:10px">AI Daily</b></div><div style="flex:1"><div class="t">Tydzień otwartych modeli</div><div class="m">Czw 19.11 · 11 min · ✓ wysłuchane</div></div></div>
+    <div class="track"><div class="cover g-daily" style="width:58px;height:58px;padding:6px;filter:hue-rotate(-40deg)"><b style="font-size:10px">AI Daily</b></div><div style="flex:1"><div class="t">Regulacje dogoniły agentów</div><div class="m">Śr 18.11 · 12 min</div></div></div>
+    <div class="track"><div class="cover g-voice" style="width:58px;height:58px;padding:6px"><b style="font-size:10px">Głos</b></div><div style="flex:1"><div class="t">Generowanie głosu – tydzień</div><div class="m">Playlista tematyczna · 7 tematów</div></div></div>
+  </div>
+  <div class="mini"><div class="cover g-daily" style="width:42px;height:42px;padding:4px;border-radius:7px"><b style="font-size:8px">AI Daily</b></div><div style="flex:1"><div style="font:600 13.5px Inter">Agenci w przeglądarce</div><div style="font:400 12px Inter;color:#C9C2F5">Rozdział 2 z 8 · AI Daily</div></div><div class="pause" style="gap:4px;margin-right:6px"><span style="background:#fff;width:4px;height:16px"></span><span style="background:#fff;width:4px;height:16px"></span></div><div class="bar"></div></div>
+  <div class="tabs">
+    <div class="tab"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#6B6B76" stroke-width="2"><path d="M12 3 3 10v11h6v-6h6v6h6V10z"/></svg>Dziś</div>
+    <div class="tab"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#6B6B76" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>Szukaj</div>
+    <div class="tab on"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6"><path d="M4 4v16M9 4v16M14 4l6 16"/></svg>Biblioteka</div>
+    <div class="tab"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="#6B6B76" stroke-width="2"><circle cx="12" cy="12" r="2"/><path d="M7 7a7 7 0 0 0 0 10M17 7a7 7 0 0 1 0 10"/></svg>Źródła</div>
+  </div>
+  <div class="home-ind"></div>
+</div><div class="caption">7 · Biblioteka — audycje z postępem, zapisane, kolejka</div></div>
+
+</body>
+</html>
