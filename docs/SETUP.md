@@ -120,6 +120,31 @@ Zaloguj się kontem z punktu 1.5. Link `newsflow://briefing/RRRR-MM-DD` (z e-mai
 > Kod aplikacji nie był kompilowany w środowisku, w którym powstał (brak Xcode). Jeśli pierwsza kompilacja zgłosi błąd —
 > zwykle to drobna różnica w API wersji `supabase-swift`; komunikat z Xcode wystarczy do szybkiej poprawki.
 
+## 6a. Funkcja `tts-preview` (ekran „Porównanie głosów”)
+
+Ekran w aplikacji (Ustawienia → Porównanie głosów) odtwarza ten sam tekst głosem systemowym iOS, OpenAI TTS i ElevenLabs.
+Głos systemowy działa od razu. Dla OpenAI i ElevenLabs potrzebna jest funkcja Supabase, która trzyma klucze po stronie serwera.
+
+**Przez panel (bez instalowania niczego):**
+1. Supabase → **Edge Functions → Deploy a new function → Via Editor**, nazwa: `tts-preview`.
+2. Wklej zawartość `supabase/functions/tts-preview/index.ts` → *Deploy*. Zostaw włączone *Verify JWT*.
+3. **Edge Functions → Secrets** → dodaj `OPENAI_API_KEY` i `ELEVENLABS_API_KEY` (te same klucze co w n8n).
+
+**Albo przez CLI:**
+```bash
+supabase link --project-ref TWOJ-REF
+```
+```bash
+supabase secrets set OPENAI_API_KEY=sk-... ELEVENLABS_API_KEY=...
+```
+```bash
+supabase functions deploy tts-preview
+```
+
+Zabezpieczenia: tylko członkowie `app_members`, maks. 1500 znaków na próbkę, limity z `app_config.limits`, każdy koszt w `api_usage`
+(`workflow = 'APP_tts_preview'`), próbki w Storage `audio/previews/` (powtórne odtworzenie bez opłaty).
+Orientacyjny koszt jednej próbki ~700 znaków: OpenAI ~0,01 USD, ElevenLabs ~0,08–0,15 USD.
+
 ## 7. Pierwsze uruchomienie (ręczne, w tej kolejności)
 
 | Krok | Co zrobić | Czego oczekiwać |

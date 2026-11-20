@@ -11,3 +11,5 @@
 
 - [ ] **Do decyzji:** audio na żądanie zamiast codziennego generowania (tekst w aplikacji, głos dopiero po kliknięciu Play).
   Opcje: darmowy głos systemowy iOS, ElevenLabs per temat z cache w Supabase Storage, OpenAI TTS. Mierzyć rzeczywiste słuchanie przez `playback_progress`.
+  - [ ] Wdrożyć funkcję `tts-preview` (docs/SETUP.md, krok 6a) i porównać głosy w aplikacji: Ustawienia → Porównanie głosów.
+  - [ ] Na podstawie ocen wybrać wariant i przebudować odtwarzanie (tekst + Play).

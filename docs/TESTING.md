@@ -27,6 +27,12 @@ Migracja + seed (dwukrotnie — idempotentność) + test dymny na PostgreSQL 16 
 kolejka ekstrakcji/analizy, zbiorcze zapisy, grupowanie dwóch materiałów w jedno wydarzenie, ocena potwierdzenia,
 kandydaci do briefingu, budżet, **RLS** (obcy użytkownik nic nie widzi, właściciel widzi), oceny, zapisane, postęp odsłuchu.
 
+Funkcja `tts-preview` (Deno, atrapy Supabase/OpenAI/ElevenLabs — generowanie, koszt, cache, odmowy):
+
+```bash
+cd supabase/functions/tts-preview && echo '{"nodeModulesDir":"auto"}' > deno.json && deno test --allow-env index.test.ts; rm deno.json
+```
+
 Testy aplikacji iOS: Xcode → *Product → Test* (`NewsflowTests`: dekodowanie odpowiedzi PostgREST, daty, adresy feedów, formatowanie).
 
 ## 2. Test „na żywo” — pierwszy dzień

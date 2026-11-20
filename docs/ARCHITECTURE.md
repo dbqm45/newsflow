@@ -26,6 +26,7 @@ C. Redaktor AI    WF03  co 2 h   check_budget → claim_items_for_analysis → O
 D. Audio          WF05  07:25    scenariusz → normalizacja pod mowę → fragmenty ≤2500 zn. → ElevenLabs → MP3 per rozdział + pełny
 E. Dostarczanie   WF06  08:00    podpisany URL → e-mail HTML (Gmail) → status delivered / delivered_text_only
    Klient         iOS            v_briefings, v_feed, RPC (set_feedback, toggle_saved, save_progress), Storage signed URLs
+   Próbki głosu   tts-preview (Edge Function) — ekran „Porównanie głosów”; klucze OpenAI/ElevenLabs tylko w sekretach funkcji
    Błędy          WF99           każdy nieobsłużony błąd → pipeline_runs (widoczny w aplikacji: Ustawienia → Stan systemu)
 ```
 

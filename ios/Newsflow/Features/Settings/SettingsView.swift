@@ -39,6 +39,7 @@ struct SettingsView: View {
 
             Section("System") {
                 NavigationLink("Stan systemu i koszty") { SystemStatusView() }
+                NavigationLink { VoiceLabView() } label: { Label("Porównanie głosów", systemImage: "waveform.badge.mic") }
             }
 
             Section("Informacje") {

@@ -27,6 +27,7 @@ ekran blokady, rozdziały, tempo, kolejka.
 | `config/audio.json` | Konfiguracja i dobór głosu ElevenLabs |
 | `email/briefing.html` | Szablon e-maila (`email/sample-briefing.html` — podgląd z danymi testowymi) |
 | `ios/` | Aplikacja iOS 17+ (SwiftUI, XcodeGen, supabase-swift) |
+| `supabase/functions/tts-preview/` | Edge Function dla ekranu „Porównanie głosów” (OpenAI TTS / ElevenLabs, cache, limity) |
 | `docs/` | [Architektura](docs/ARCHITECTURE.md) · [Konfiguracja krok po kroku](docs/SETUP.md) · [Testy i odbiór](docs/TESTING.md) · [Koszty](docs/COSTS.md) |
 
 ## Szybki start
