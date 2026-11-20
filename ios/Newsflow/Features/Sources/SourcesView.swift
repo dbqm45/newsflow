@@ -19,6 +19,7 @@ struct SourcesView: View {
                     .font(.footnote).foregroundStyle(.secondary)
             }
         }
+        .screenBackground()
         .navigationTitle("Źródła")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

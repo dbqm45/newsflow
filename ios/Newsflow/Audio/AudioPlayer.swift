@@ -11,13 +11,20 @@ struct Track: Identifiable, Equatable {
     let storagePath: String
     let duration: Double
     let chapters: [Chapter]
+    /// Tekst każdego rozdziału (ze scenariusza) — do widoku „Tekst”.
+    let texts: [String]
+    /// Okładka każdego rozdziału (wg podkategorii tematu).
+    let styles: [CoverStyle]
     let briefingDate: String?
 
     static func from(_ b: Briefing) -> Track? {
         guard let assetId = b.audioAssetId, let path = b.audioPath else { return nil }
-        return Track(id: assetId, title: b.title, subtitle: "NEWSFLOW · \(Fmt.dayLong(b.briefingDate))",
+        return Track(id: assetId, title: b.title, subtitle: "AI Daily · \(Fmt.dayLong(b.briefingDate))",
                      storagePath: path, duration: b.audioDurationSeconds ?? b.chapters.reduce(0) { $0 + $1.durationSeconds },
-                     chapters: b.chapters, briefingDate: b.briefingDate)
+                     chapters: b.chapters,
+                     texts: b.chapters.map { b.scriptText(for: $0) ?? "" },
+                     styles: b.chapters.map { b.style(for: $0) },
+                     briefingDate: b.briefingDate)
     }
 }
 
@@ -48,6 +55,44 @@ final class AudioPlayer {
 
     var currentChapter: Chapter? {
         current?.chapters.last { $0.startSeconds <= currentTime + 0.5 }
+    }
+
+    /// Okładka bieżącego rozdziału (kolor tła odtwarzacza).
+    var currentStyle: CoverStyle {
+        guard let t = current, let ch = currentChapter, ch.index < t.styles.count else { return .daily }
+        return t.styles[ch.index]
+    }
+
+    /// Tekst bieżącego rozdziału podzielony na akapity.
+    var currentParagraphs: [String] {
+        guard let t = current, let ch = currentChapter, ch.index < t.texts.count else { return [] }
+        return t.texts[ch.index].components(separatedBy: "\n\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// Postęp w bieżącym rozdziale 0…1.
+    var chapterProgress: Double {
+        guard let ch = currentChapter, ch.durationSeconds > 0 else { return 0 }
+        return min(max((currentTime - ch.startSeconds) / ch.durationSeconds, 0), 1)
+    }
+
+    /// Indeks czytanego akapitu — szacowany proporcjonalnie do długości akapitów.
+    var currentParagraphIndex: Int {
+        let paras = currentParagraphs
+        guard !paras.isEmpty else { return 0 }
+        let total = Double(paras.reduce(0) { $0 + $1.count })
+        var acc = 0.0
+        for (i, p) in paras.enumerated() {
+            acc += Double(p.count) / total
+            if chapterProgress < acc { return i }
+        }
+        return paras.count - 1
+    }
+
+    var chapterLabel: String {
+        guard let t = current, let ch = currentChapter else { return "" }
+        return "Rozdział \(ch.index + 1) z \(t.chapters.count)"
     }
 
     @ObservationIgnored private let player = AVPlayer()

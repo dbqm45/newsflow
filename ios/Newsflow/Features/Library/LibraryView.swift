@@ -1,60 +1,83 @@
 import SwiftUI
 
 struct LibraryView: View {
-    enum Segment: String, CaseIterable { case episodes = "Audycje", saved = "Zapisane" }
+    enum Segment: String, CaseIterable { case episodes = "Audycje", saved = "Zapisane", queue = "Kolejka" }
+
+    @Environment(AppState.self) private var app
     @Environment(AudioPlayer.self) private var player
-    @State private var segment: Segment = .episodes
     @State private var briefings: [Briefing] = []
     @State private var savedItems: [FeedItem] = []
     @State private var savedBriefings: [Briefing] = []
     @State private var error: String?
 
     var body: some View {
-        List {
-            Picker("Widok", selection: $segment) {
-                ForEach(Segment.allCases, id: \.self) { Text($0.rawValue) }
-            }
-            .pickerStyle(.segmented)
-            .listRowBackground(Color.clear)
-            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+        @Bindable var app = app
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 12) {
+                    AvatarButton()
+                    Text("Twoja biblioteka").font(Theme.display(24))
+                    Spacer()
+                }
+                .padding(.top, 8)
 
-            if let error { ErrorBanner(message: error) { Task { await load() } } }
+                HStack(spacing: 8) {
+                    ForEach(Segment.allCases, id: \.self) { s in
+                        ChipButton(title: s.rawValue, selected: app.libraryFilter == s) { app.libraryFilter = s }
+                    }
+                }
+                .padding(.top, 14).padding(.bottom, 10)
 
-            switch segment {
-            case .episodes:
-                ForEach(briefings) { b in
-                    NavigationLink(value: b) { EpisodeRow(briefing: b) }
-                        .swipeActions {
-                            if let t = Track.from(b) {
-                                Button { player.enqueue(t) } label: { Label("Do kolejki", systemImage: "text.badge.plus") }.tint(.indigo)
-                            }
+                if let error { ErrorBanner(message: error) { Task { await load() } } }
+
+                switch app.libraryFilter {
+                case .episodes:
+                    Label("Ostatnie audycje", systemImage: "arrow.up.arrow.down")
+                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.text2).padding(.vertical, 6)
+                    ForEach(briefings) { b in
+                        NavigationLink(value: b) { EpisodeRow(briefing: b) }.buttonStyle(.plain)
+                    }
+                    if briefings.isEmpty && error == nil {
+                        ContentUnavailableView("Archiwum jest puste", systemImage: "books.vertical")
+                    }
+                case .saved:
+                    ForEach(savedBriefings) { b in NavigationLink(value: b) { EpisodeRow(briefing: b) }.buttonStyle(.plain) }
+                    ForEach(savedItems) { i in NavigationLink(value: i) { FeedRow(item: i) }.buttonStyle(.plain) }
+                    if savedItems.isEmpty && savedBriefings.isEmpty {
+                        ContentUnavailableView("Nic nie zapisano", systemImage: "heart",
+                                               description: Text("Zapisuj briefingi i materiały ikoną serca lub zakładki."))
+                    }
+                case .queue:
+                    if let t = player.current {
+                        Text("Teraz odtwarzane").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.text2).padding(.vertical, 6)
+                        QueueRow(track: t, active: true)
+                    }
+                    if !player.queue.isEmpty {
+                        Text("Następne").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.text2).padding(.top, 14).padding(.bottom, 6)
+                        ForEach(player.queue) { t in
+                            QueueRow(track: t, active: false)
+                                .contextMenu { Button("Usuń z kolejki", role: .destructive) { player.removeFromQueue(t) } }
                         }
-                }
-                if briefings.isEmpty && error == nil {
-                    ContentUnavailableView("Archiwum jest puste", systemImage: "square.stack")
-                }
-            case .saved:
-                if !savedBriefings.isEmpty {
-                    Section("Briefingi") { ForEach(savedBriefings) { b in NavigationLink(value: b) { EpisodeRow(briefing: b) } } }
-                }
-                Section("Materiały") {
-                    ForEach(savedItems) { i in NavigationLink(value: i) { FeedRow(item: i) } }
-                    if savedItems.isEmpty {
-                        Text("Zapisuj materiały ikoną zakładki lub gestem w prawo na liście wiadomości.")
-                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                    if player.current == nil && player.queue.isEmpty {
+                        ContentUnavailableView("Kolejka jest pusta", systemImage: "list.bullet",
+                                               description: Text("Dodawaj audycje przyciskiem + na ekranie briefingu."))
                     }
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 24)
         }
-        .navigationTitle("Biblioteka")
+        .background(Theme.bg.ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
         .refreshable { await load() }
         .task { await load() }
-        .onChange(of: segment) { _, _ in Task { await load() } }
+        .onChange(of: app.libraryFilter) { _, _ in Task { await load() } }
     }
 
     private func load() async {
         do {
-            switch segment {
+            switch app.libraryFilter {
             case .episodes:
                 briefings = try await API.briefings(limit: 60)
             case .saved:
@@ -62,6 +85,8 @@ struct LibraryView: View {
                 async let b = API.savedBriefings()
                 savedItems = try await i
                 savedBriefings = try await b
+            case .queue:
+                break
             }
             error = nil
         } catch {
@@ -76,31 +101,70 @@ struct EpisodeRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Artwork(size: 52)
+            CoverArt(style: .daily, kicker: nil, title: "AI Daily", size: 58, showWave: true)
+                .hueRotation(.degrees(hue))
             VStack(alignment: .leading, spacing: 3) {
-                Text(Fmt.dayShort(briefing.briefingDate)).font(.caption).foregroundStyle(.secondary)
-                Text(briefing.title).font(.subheadline.weight(.semibold)).lineLimit(2)
-                if let d = briefing.audioDurationSeconds {
-                    HStack(spacing: 6) {
-                        Text(Fmt.minutes(d)).font(.caption).foregroundStyle(.secondary)
-                        if let p = briefing.myPositionSeconds, p > 0 {
-                            ProgressView(value: min(p / d, 1)).frame(width: 60).tint(.accentColor)
-                        }
-                    }
-                } else {
-                    Text("tylko tekst").font(.caption).foregroundStyle(.secondary)
+                Text(briefing.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white).lineLimit(2)
+                Text(subtitle).font(.system(size: 12.5)).foregroundStyle(progressColor)
+                if let p = progress, p > 0, p < 0.97 {
+                    ProgressView(value: p).tint(.white).frame(maxWidth: 160)
                 }
             }
             Spacer()
             if let t = Track.from(briefing) {
+                let active = player.current?.id == t.id && player.isPlaying
                 Button {
                     if player.current?.id == t.id { player.togglePlay() } else { Task { await player.play(t, from: briefing.myPositionSeconds) } }
                 } label: {
-                    Image(systemName: player.current?.id == t.id && player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.title).foregroundStyle(.tint)
+                    Image(systemName: active ? "pause.circle.fill" : "play.circle.fill")
+                        .font(.system(size: 32)).foregroundStyle(active ? Theme.accentSoft : .white)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
             }
         }
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
+    }
+
+    /// Każdy dzień w nieco innym odcieniu, żeby archiwum nie było monotonne.
+    private var hue: Double {
+        let day = Int(briefing.briefingDate.suffix(2)) ?? 0
+        return Double((day * 37) % 120) - 60
+    }
+
+    private var progress: Double? {
+        guard let p = briefing.myPositionSeconds, let d = briefing.audioDurationSeconds, d > 0 else { return nil }
+        return p / d
+    }
+
+    private var subtitle: String {
+        var parts = [Fmt.dayShort(briefing.briefingDate)]
+        if let d = briefing.audioDurationSeconds { parts.append(Fmt.minutes(d)) } else { parts.append("tylko tekst") }
+        if let p = progress {
+            if p >= 0.97 { parts.append("✓ wysłuchane") }
+            else if p > 0, let d = briefing.audioDurationSeconds { parts.append("zostało \(Fmt.minutes(d - (briefing.myPositionSeconds ?? 0)))") }
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private var progressColor: Color {
+        guard let p = progress, p > 0, p < 0.97 else { return Theme.text2 }
+        return Theme.accentSoft
+    }
+}
+
+struct QueueRow: View {
+    let track: Track
+    let active: Bool
+    var body: some View {
+        HStack(spacing: 12) {
+            CoverArt(style: .daily, title: "AI Daily", size: 52, showWave: true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(track.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(active ? Theme.accentSoft : .white).lineLimit(2)
+                Text(track.subtitle).font(.system(size: 12.5)).foregroundStyle(Theme.text2)
+            }
+            Spacer()
+        }
+        .padding(.vertical, 6)
     }
 }

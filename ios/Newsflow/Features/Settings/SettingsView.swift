@@ -49,6 +49,7 @@ struct SettingsView: View {
             }
             if let error { Text(error).foregroundStyle(.red).font(.footnote) }
         }
+        .screenBackground()
         .navigationTitle("Ustawienia")
         .task { await load() }
     }
@@ -106,6 +107,7 @@ struct SystemStatusView: View {
                 }
             }
         }
+        .screenBackground()
         .navigationTitle("Stan systemu")
         .refreshable { await load() }
         .task { await load() }

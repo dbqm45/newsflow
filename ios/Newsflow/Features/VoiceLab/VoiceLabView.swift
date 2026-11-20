@@ -31,6 +31,7 @@ struct VoiceLabView: View {
             elevenSection
             summarySection
         }
+        .screenBackground()
         .navigationTitle("Porównanie głosów")
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear { lab.stop() }

@@ -26,7 +26,10 @@ final class DecodingTests: XCTestCase {
           "status":"delivered","items_considered":25,"items_analyzed":60,"items_rejected":30,
           "created_at":"2026-11-20T06:01:02.345678+00:00","email_sent_at":null,
           "audio_asset_id":"7b4c1f0e-1111-4e2b-9c55-1f9e0d8a0002","audio_path":"briefings/2026-11-20/x/full.mp3",
-          "audio_duration_seconds":734.5,"my_position_seconds":null,"is_saved":false}]
+          "audio_duration_seconds":734.5,"my_position_seconds":null,"is_saved":false,
+          "script":{"title":"t","description":"d","chapters":[
+            {"kind":"intro","title":"Intro","story_ids":[],"text":"Dzień dobry.\n\nAudycję przygotowała i czyta sztuczna inteligencja."},
+            {"kind":"headline","title":"Model X","story_ids":["s1"],"text":"Akapit pierwszy.\n\nAkapit drugi."}]}}]
         """.data(using: .utf8)!
         let rows = try JSONCoding.decoder.decode([Briefing].self, from: json)
         let b = try XCTUnwrap(rows.first)
@@ -35,6 +38,19 @@ final class DecodingTests: XCTestCase {
         XCTAssertEqual(b.chapter(forStory: "s1")?.startSeconds, 41.2)
         XCTAssertEqual(b.sections.first?.sources.first?.source, "OpenAI News")
         XCTAssertEqual(Track.from(b)?.chapters.count, 2)
+        // Okładka rozdziału wg podkategorii tematu; intro = styl briefingu
+        XCTAssertEqual(b.style(for: b.chapters[1]).slug, "agents")
+        XCTAssertEqual(b.style(for: b.chapters[0]), .daily)
+        XCTAssertEqual(b.scriptText(for: b.chapters[1]), "Akapit pierwszy.\n\nAkapit drugi.")
+        XCTAssertEqual(Track.from(b)?.texts.count, 2)
+    }
+
+    func testCoverStyleLookup() {
+        XCTAssertEqual(CoverStyle.forKey("policy-safety").word, "Regulacje")
+        XCTAssertEqual(CoverStyle.forKey("Agenci AI").slug, "agents")
+        XCTAssertEqual(CoverStyle.forKey(nil), .daily)
+        XCTAssertEqual(CoverStyle.forKey("nieznana"), .daily)
+        XCTAssertEqual(CoverStyle.categories.count, 15)
     }
 
     func testFeedItemDecoding() throws {

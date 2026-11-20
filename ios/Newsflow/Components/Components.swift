@@ -6,23 +6,21 @@ struct ScoreBadge: View {
     var label: String? = nil
 
     private var color: Color {
-        guard let v = value else { return .gray }
+        guard let v = value else { return Theme.text3 }
         switch v {
-        case 7...: return .green
-        case 5.5..<7: return .orange
-        default: return .gray
+        case 7...: return Theme.ok
+        case 5.5..<7: return Theme.warn
+        default: return Theme.text2
         }
     }
 
     var body: some View {
-        HStack(spacing: 3) {
-            if let label { Text(label).font(.caption2).foregroundStyle(.secondary) }
-            Text(Fmt.score(value)).font(.caption.monospacedDigit().bold())
-        }
-        .padding(.horizontal, 7).padding(.vertical, 3)
-        .background(color.opacity(0.15), in: Capsule())
-        .foregroundStyle(color)
-        .accessibilityLabel("Ocena \(Fmt.score(value)) na 10")
+        Text([label, Fmt.score(value)].compactMap { $0 }.joined(separator: " "))
+            .font(.system(size: 11, weight: .bold).monospacedDigit())
+            .padding(.horizontal, 7).padding(.vertical, 3)
+            .background(color.opacity(0.14), in: RoundedRectangle(cornerRadius: 6))
+            .foregroundStyle(color)
+            .accessibilityLabel("\(label ?? "Ocena") \(Fmt.score(value)) na 10")
     }
 }
 
@@ -38,35 +36,38 @@ struct Tag: View {
         .labelStyle(.titleAndIcon)
         .font(.caption2.weight(.medium))
         .padding(.horizontal, 7).padding(.vertical, 3)
-        .background(.quaternary, in: Capsule())
+        .background(.white.opacity(0.1), in: Capsule())
     }
 }
 
-/// Wiersz materiału w feedzie.
+/// Wiersz materiału (okładka podkategorii + tytuł + źródło).
 struct FeedRow: View {
     let item: FeedItem
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(item.sourceName).font(.caption.weight(.semibold)).foregroundStyle(.tint)
-                if item.isPrivate { Image(systemName: "envelope.fill").font(.caption2).foregroundStyle(.secondary) }
-                Text("· \(Fmt.ago(item.date))").font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                if item.isSaved { Image(systemName: "bookmark.fill").font(.caption).foregroundStyle(.tint) }
-                ScoreBadge(value: item.importanceScore)
+        HStack(alignment: .top, spacing: 12) {
+            CoverArt(style: CoverStyle.forKey(item.subcategorySlug), title: CoverStyle.forKey(item.subcategorySlug).word, size: 52)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white).lineLimit(2)
+                HStack(spacing: 6) {
+                    if item.isPrivate { Image(systemName: "envelope.fill").font(.system(size: 10)) }
+                    Text("\(item.sourceName) · \(Fmt.ago(item.date))").lineLimit(1)
+                    ScoreBadge(value: item.importanceScore)
+                    if let n = item.storySourceCount, n > 1 {
+                        Text(Fmt.sources(n)).font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.warn)
+                    }
+                }
+                .font(.system(size: 12.5))
+                .foregroundStyle(Theme.text2)
+                if let summary = item.summary {
+                    Text(summary).font(.system(size: 13)).foregroundStyle(Theme.text3).lineLimit(2)
+                }
             }
-            Text(item.title).font(.headline).lineLimit(3)
-            if let summary = item.summary {
-                Text(summary).font(.subheadline).foregroundStyle(.secondary).lineLimit(3)
-            }
-            HStack(spacing: 6) {
-                if let sub = item.subcategoryName { Tag(text: sub) }
-                if let n = item.storySourceCount, n > 1 { Tag(text: Fmt.sources(n), systemImage: "checkmark.seal") }
-                if item.completeness == "partial" { Tag(text: "fragment", systemImage: "doc.badge.ellipsis") }
-            }
+            Spacer(minLength: 0)
+            if item.isSaved { Image(systemName: "bookmark.fill").font(.caption).foregroundStyle(Theme.accentSoft) }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
     }
 }
 
@@ -83,8 +84,8 @@ struct ChipBar<Value: Hashable>: View {
                     Button { selection = opt.0 } label: {
                         Text(opt.1).font(.subheadline.weight(selected ? .semibold : .regular))
                             .padding(.horizontal, 12).padding(.vertical, 6)
-                            .background(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.quaternary), in: Capsule())
-                            .foregroundStyle(selected ? Color.white : Color.primary)
+                            .background(selected ? Theme.accent : Theme.surface2, in: Capsule())
+                            .foregroundStyle(Color.white)
                     }
                     .buttonStyle(.plain)
                 }
@@ -106,17 +107,5 @@ struct ErrorBanner: View {
         }
         .padding(12)
         .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
-    }
-}
-
-/// Okładka audycji (gradient + fala).
-struct Artwork: View {
-    var size: CGFloat = 56
-    var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.18)
-            .fill(LinearGradient(colors: [Color(red: 0.06, green: 0.09, blue: 0.16), Color(red: 0.31, green: 0.27, blue: 0.90)],
-                                 startPoint: .topLeading, endPoint: .bottomTrailing))
-            .frame(width: size, height: size)
-            .overlay(Image(systemName: "waveform").font(.system(size: size * 0.42, weight: .semibold)).foregroundStyle(.white))
     }
 }

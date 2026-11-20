@@ -6,11 +6,13 @@ import Supabase
 @Observable
 final class AppState {
     enum Phase: Equatable { case loading, notConfigured, signedOut, notMember, ready }
-    enum Tab: Hashable { case home, feed, library, sources, settings }
+    enum Tab: Hashable { case home, search, library, sources }
 
     var phase: Phase = .loading
     var tab: Tab = .home
     var showPlayer = false
+    var showSettings = false
+    var libraryFilter: LibraryView.Segment = .episodes
     /// Ustawiane przez link newsflow://briefing/2026-11-20
     var pendingBriefingDate: String?
     var userEmail: String?

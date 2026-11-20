@@ -26,7 +26,8 @@ ekran blokady, rozdziały, tempo, kolejka.
 | `schemas/` | Schematy JSON odpowiedzi AI (OpenAI Structured Outputs, tryb strict) |
 | `config/audio.json` | Konfiguracja i dobór głosu ElevenLabs |
 | `email/briefing.html` | Szablon e-maila (`email/sample-briefing.html` — podgląd z danymi testowymi) |
-| `ios/` | Aplikacja iOS 17+ (SwiftUI, XcodeGen, supabase-swift) |
+| `ios/` | Aplikacja iOS 17+ (SwiftUI, XcodeGen, supabase-swift), ciemny motyw w stylu aplikacji muzycznych |
+| `design/` | Makieta UI (`mockup.html`) i ekrany PNG — wzorzec dla `ios/Newsflow/Core/Theme.swift` |
 | `supabase/functions/tts-preview/` | Edge Function dla ekranu „Porównanie głosów” (OpenAI TTS / ElevenLabs, cache, limity) |
 | `docs/` | [Architektura](docs/ARCHITECTURE.md) · [Konfiguracja krok po kroku](docs/SETUP.md) · [Testy i odbiór](docs/TESTING.md) · [Koszty](docs/COSTS.md) |
 

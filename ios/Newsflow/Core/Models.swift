@@ -22,6 +22,8 @@ struct Briefing: Decodable, Identifiable, Hashable {
     let audioDurationSeconds: Double?
     let myPositionSeconds: Double?
     var isSaved: Bool?
+    /// Scenariusz audycji (tekst do czytania w odtwarzaczu). Kolumna dodana w migracji 20261121000001.
+    let script: BriefingScript?
 
     var hasAudio: Bool { audioPath != nil && audioAssetId != nil }
     var date: Date? { DateParsing.day(briefingDate) }
@@ -30,6 +32,39 @@ struct Briefing: Decodable, Identifiable, Hashable {
     func chapter(forStory storyId: String) -> Chapter? {
         chapters.first { ($0.storyIds ?? []).contains(storyId) }
     }
+
+    func section(forStory storyId: String) -> BriefingSection? {
+        sections.first { $0.storyId == storyId }
+    }
+
+    /// Temat omawiany w rozdziale (pierwsze wydarzenie rozdziału).
+    func section(for chapter: Chapter) -> BriefingSection? {
+        guard let sid = chapter.storyIds?.first else { return nil }
+        return section(forStory: sid)
+    }
+
+    func style(for chapter: Chapter) -> CoverStyle {
+        CoverStyle.forKey(section(for: chapter)?.subcategory)
+    }
+
+    /// Tekst rozdziału ze scenariusza (rozdziały audio powstają 1:1 z rozdziałów scenariusza).
+    func scriptText(for chapter: Chapter) -> String? {
+        guard let s = script, chapter.index < s.chapters.count else { return nil }
+        return s.chapters[chapter.index].text
+    }
+
+    var totalSources: Int { sections.reduce(0) { $0 + ($1.sourceCount ?? $1.sources.count) } }
+}
+
+struct BriefingScript: Decodable, Hashable {
+    let chapters: [ScriptChapter]
+}
+
+struct ScriptChapter: Decodable, Hashable {
+    let kind: String
+    let title: String
+    let text: String
+    let storyIds: [String]?
 }
 
 struct BriefingSection: Decodable, Hashable, Identifiable {

@@ -21,9 +21,9 @@ struct RootView: View {
                 MainTabs()
             }
         }
-        .sheet(isPresented: $app.showPlayer) {
+        .background(Theme.bg.ignoresSafeArea())
+        .fullScreenCover(isPresented: $app.showPlayer) {
             PlayerView()
-                .presentationDragIndicator(.visible)
         }
         .alert("Odtwarzanie", isPresented: Binding(get: { player.errorMessage != nil }, set: { if !$0 { player.errorMessage = nil } })) {
             Button("OK", role: .cancel) {}
@@ -41,24 +41,27 @@ struct MainTabs: View {
         TabView(selection: $app.tab) {
             NavigationStack { HomeView().newsflowDestinations() }
                 .withMiniPlayer()
-                .tabItem { Label("Dziś", systemImage: "sun.horizon") }
+                .tabItem { Label("Dziś", systemImage: "house.fill") }
                 .tag(AppState.Tab.home)
-            NavigationStack { FeedView().newsflowDestinations() }
+            NavigationStack { SearchView().newsflowDestinations() }
                 .withMiniPlayer()
-                .tabItem { Label("Wiadomości", systemImage: "list.bullet.rectangle") }
-                .tag(AppState.Tab.feed)
+                .tabItem { Label("Szukaj", systemImage: "magnifyingglass") }
+                .tag(AppState.Tab.search)
             NavigationStack { LibraryView().newsflowDestinations() }
                 .withMiniPlayer()
-                .tabItem { Label("Biblioteka", systemImage: "square.stack") }
+                .tabItem { Label("Biblioteka", systemImage: "books.vertical.fill") }
                 .tag(AppState.Tab.library)
             NavigationStack { SourcesView().newsflowDestinations() }
                 .withMiniPlayer()
-                .tabItem { Label("Źródła", systemImage: "antenna.radiowaves.left.and.right") }
+                .tabItem { Label("Źródła", systemImage: "dot.radiowaves.left.and.right") }
                 .tag(AppState.Tab.sources)
-            NavigationStack { SettingsView().newsflowDestinations() }
-                .withMiniPlayer()
-                .tabItem { Label("Ustawienia", systemImage: "gearshape") }
-                .tag(AppState.Tab.settings)
+        }
+        .sheet(isPresented: $app.showSettings) {
+            NavigationStack {
+                SettingsView()
+                    .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Gotowe") { app.showSettings = false } } }
+            }
+            .preferredColorScheme(.dark)
         }
     }
 }
@@ -82,5 +85,11 @@ extension View {
         navigationDestination(for: FeedItem.self) { ItemDetailView(item: $0) }
             .navigationDestination(for: Briefing.self) { BriefingDetailView(briefing: $0) }
             .navigationDestination(for: SectionRoute.self) { SectionDetailView(briefing: $0.briefing, section: $0.section) }
+            .navigationDestination(for: CategoryRoute.self) { CategoryFeedView(style: $0.style) }
+    }
+
+    /// Wspólne tło ekranów.
+    func screenBackground() -> some View {
+        scrollContentBackground(.hidden).background(Theme.bg.ignoresSafeArea())
     }
 }

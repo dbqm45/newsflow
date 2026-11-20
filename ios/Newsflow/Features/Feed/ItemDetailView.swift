@@ -9,6 +9,7 @@ struct ItemDetailView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 10) {
+                    CoverArt(style: CoverStyle.forKey(item.subcategorySlug), size: 72)
                     HStack {
                         Text(item.sourceName).font(.subheadline.bold()).foregroundStyle(.tint)
                         if item.isPrivate { Tag(text: "newsletter", systemImage: "envelope") }
@@ -74,6 +75,7 @@ struct ItemDetailView: View {
                 }
             }
         }
+        .screenBackground()
         .navigationTitle(item.subcategoryName ?? "Materiał")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
