@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+ <title>AI Channel</title>
+ <entry>
+  <id>yt:video:abc123</id>
+  <yt:videoId>abc123</yt:videoId>
+  <title>New reasoning model explained</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=abc123"/>
+  <author><name>AI Channel</name></author>
+  <published>__RECENT__</published>
+  <media:group><media:description>In this video we look at the new model.</media:description></media:group>
+ </entry>
+</feed>

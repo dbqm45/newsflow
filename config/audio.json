@@ -1,0 +1,38 @@
+{
+  "_comment": "Referencyjna konfiguracja audio. Wartości używane w runtime są w Supabase: app_config.elevenlabs (zmieniaj tam). Ten plik dokumentuje opcje.",
+  "provider": "elevenlabs",
+  "endpoint": "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?output_format={output_format}",
+  "voice_id": "REPLACE_WITH_VOICE_ID",
+  "voice_selection_tips": [
+    "Voice Library → filtr: Language = Polish, Use case = Narrative/News; posłuchaj próbki z nazwami angielskimi (OpenAI, Hugging Face).",
+    "Głos powinien być spokojny, neutralny, o średnim tempie. Unikaj głosów 'character'.",
+    "Po wyborze: Add to My Voices → skopiuj Voice ID → update app_config (patrz docs/SETUP.md)."
+  ],
+  "model_id": "eleven_multilingual_v2",
+  "model_alternatives": {
+    "eleven_multilingual_v2": "Najlepsza jakość dla polskiego, stabilna prozodia — rekomendowany do briefingu.",
+    "eleven_flash_v2_5": "~50% taniej i szybciej, nieco gorsza intonacja. Dobry do krótkich nagrań pojedynczych materiałów.",
+    "eleven_v3": "Najbardziej ekspresyjny; sprawdź wymowę nazw własnych przed przełączeniem."
+  },
+  "output_format": "mp3_44100_96",
+  "output_format_note": "96 kbps CBR wystarcza dla mowy (~0,7 MB/min). Czas trwania liczony jest z rozmiaru pliku, więc format musi być CBR mp3_*.",
+  "voice_settings": {
+    "stability": 0.5,
+    "similarity_boost": 0.75,
+    "style": 0.15,
+    "use_speaker_boost": true,
+    "speed": 1.0
+  },
+  "max_chunk_chars": 2500,
+  "chunking": "Tekst dzielony wyłącznie na granicach akapitów/zdań; previous_text/next_text zachowują ciągłość intonacji w obrębie rozdziału.",
+  "target_minutes": 12,
+  "words_per_minute": 140,
+  "usd_per_1k_characters": 0.22,
+  "cost_estimate": "12 min ≈ 1700 słów ≈ 12 500 znaków dziennie ≈ 375 tys. znaków/mies. To przekracza plan Creator (100k, ~22 USD) — patrz docs/COSTS.md: skróć audycję do ~4 min, użyj eleven_flash_v2_5 albo plan Pro. Limit: app_config.limits.elevenlabs.monthly_characters.",
+  "storage": {
+    "bucket": "audio (prywatny)",
+    "path": "briefings/{yyyy-mm-dd}/{briefing_id}/chapter-NN.mp3 oraz full.mp3",
+    "access": "Aplikacja: podpisane URL-e na 6 h. E-mail: podpisany URL na 7 dni."
+  },
+  "disclosure": "Pierwszy rozdział zawsze zawiera zdanie: „Audycję przygotowała i czyta sztuczna inteligencja.” (wymuszone w WF04). Metadane audio_assets.ai_generated = true."
+}

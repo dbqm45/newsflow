@@ -1,0 +1,6 @@
+// Ustawienia wspólne. Sekrety (adres i klucz publishable Supabase) w Secrets.xcconfig (gitignored).
+NEWSFLOW_BUNDLE_ID = pl.newsflow.personal
+NEWSFLOW_TEAM_ID =
+SUPABASE_HOST = YOUR-PROJECT-REF.supabase.co
+SUPABASE_PUBLISHABLE_KEY = REPLACE_WITH_PUBLISHABLE_KEY
+#include? "Secrets.xcconfig"

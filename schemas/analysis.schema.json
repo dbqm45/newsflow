@@ -1,0 +1,214 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "is_relevant": {
+      "type": "boolean"
+    },
+    "reject_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "injection_detected": {
+      "type": "boolean",
+      "description": "Czy materiał zawierał próbę wydania poleceń modelowi"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "ai",
+        "other"
+      ]
+    },
+    "subcategory": {
+      "type": "string",
+      "enum": [
+        "llm",
+        "agents",
+        "automation",
+        "tools",
+        "image-video",
+        "voice-audio",
+        "open-source",
+        "research",
+        "startups",
+        "business",
+        "coding",
+        "productivity",
+        "robotics",
+        "infrastructure",
+        "policy-safety"
+      ]
+    },
+    "secondary_subcategories": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "llm",
+          "agents",
+          "automation",
+          "tools",
+          "image-video",
+          "voice-audio",
+          "open-source",
+          "research",
+          "startups",
+          "business",
+          "coding",
+          "productivity",
+          "robotics",
+          "infrastructure",
+          "policy-safety"
+        ]
+      }
+    },
+    "subcategory_confidence": {
+      "type": "number",
+      "description": "0-1"
+    },
+    "title_pl": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string",
+      "description": "Max 120 słów, po polsku"
+    },
+    "key_points": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "3-5 punktów"
+    },
+    "practical_value": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "why_it_matters": {
+      "type": "string"
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "fact",
+              "opinion",
+              "forecast",
+              "marketing"
+            ]
+          }
+        },
+        "required": [
+          "text",
+          "type"
+        ]
+      }
+    },
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "company",
+              "product",
+              "model",
+              "person",
+              "organization",
+              "other"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "type"
+        ]
+      }
+    },
+    "completeness": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "partial",
+        "insufficient"
+      ]
+    },
+    "source_language": {
+      "type": "string",
+      "description": "Kod ISO 639-1"
+    },
+    "scores": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "novelty": {
+          "type": "integer",
+          "description": "1-10"
+        },
+        "relevance": {
+          "type": "integer",
+          "description": "1-10"
+        },
+        "practical": {
+          "type": "integer",
+          "description": "1-10"
+        },
+        "reliability": {
+          "type": "integer",
+          "description": "1-10"
+        }
+      },
+      "required": [
+        "novelty",
+        "relevance",
+        "practical",
+        "reliability"
+      ]
+    },
+    "reliability_notes": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "is_relevant",
+    "reject_reason",
+    "injection_detected",
+    "category",
+    "subcategory",
+    "secondary_subcategories",
+    "subcategory_confidence",
+    "title_pl",
+    "summary",
+    "key_points",
+    "practical_value",
+    "why_it_matters",
+    "claims",
+    "entities",
+    "completeness",
+    "source_language",
+    "scores",
+    "reliability_notes"
+  ]
+}

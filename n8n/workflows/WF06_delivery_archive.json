@@ -1,0 +1,407 @@
+{
+  "name": "NEWSFLOW WF06 – Delivery & Archive",
+  "nodes": [
+    {
+      "id": "3131ea90-16b1-4782-a680-6ca3b0f34288",
+      "position": [
+        0,
+        0
+      ],
+      "name": "Daily 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "0456c4df-2531-4b7f-a7c4-469409f67b17",
+      "position": [
+        0,
+        180
+      ],
+      "name": "Run manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "parameters": {}
+    },
+    {
+      "id": "489f1843-5876-4c6a-a694-ce036ccc8912",
+      "position": [
+        240,
+        90
+      ],
+      "name": "Load config",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/rpc/get_config",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}"
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "8542f40e-27f7-49ca-a23b-52ced32b2ee7",
+      "position": [
+        480,
+        90
+      ],
+      "name": "Get briefing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "GET",
+        "url": "=https://YOUR-PROJECT-REF.supabase.co/rest/v1/v_briefings?briefing_date=eq.{{ $now.setZone('Europe/Warsaw').toFormat('yyyy-MM-dd') }}&edition=eq.ai-daily&select=*&limit=1",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth"
+      },
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "fe40b922-2ead-480a-aed9-114ad215e591",
+      "position": [
+        720,
+        90
+      ],
+      "name": "Prepare delivery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// NEWSFLOW — wygenerowane z n8n/src/code/wf06_prepare_delivery.js (nie edytuj w n8n — edytuj źródło i przebuduj)\nconst b = $input.first() ? $input.first().json : {};\nif (!b || !b.id) return [{ json: { missing: true, audio_path: null } }];\nreturn [{ json: { ...b, missing: false } }];\n"
+      }
+    },
+    {
+      "id": "ebcbbee5-8074-42c0-aa15-e2da5eb4d4e3",
+      "position": [
+        960,
+        90
+      ],
+      "name": "Sign audio URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "=https://YOUR-PROJECT-REF.supabase.co/storage/v1/object/sign/audio/{{ $json.audio_path || '__no_audio__' }}",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ expiresIn: (($(\"Load config\").first().json.delivery || {}).signed_url_days || 7) * 86400 }) }}"
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "8516a4a1-a3fd-40fa-a9af-822a0aa89a9f",
+      "position": [
+        1200,
+        90
+      ],
+      "name": "Render email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// NEWSFLOW — wygenerowane z n8n/src/code/wf06_render_email.js (nie edytuj w n8n — edytuj źródło i przebuduj)\n// ---- lib/email.cjs ----\n// NEWSFLOW — renderowanie e-maila z briefingiem (szablon: email/briefing.html)\n\nfunction escapeHtml(s) {\n  return String(s == null ? '' : s).replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' }[c]));\n}\n\nfunction fillTemplate(tpl, vars) {\n  return tpl.replace(/\\{\\{(\\w+)\\}\\}/g, (m, k) => (vars[k] == null ? '' : String(vars[k])));\n}\n\nfunction formatDatePl(isoDate) {\n  const months = ['stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca', 'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia'];\n  const days = ['niedziela', 'poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota'];\n  const d = new Date(isoDate + 'T12:00:00Z');\n  return `${days[d.getUTCDay()]}, ${d.getUTCDate()} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()}`;\n}\n\nfunction formatDuration(sec) {\n  if (!sec) return '';\n  const m = Math.floor(sec / 60), s = Math.round(sec % 60);\n  return `${m}:${String(s).padStart(2, '0')}`;\n}\n\nfunction sourcesHtml(sources) {\n  if (!sources || !sources.length) return '';\n  return '<div style=\"margin-top:8px;font-size:13px;line-height:1.7;\">Źródła: ' + sources.map((s) =>\n    `<a href=\"${escapeHtml(s.url)}\" style=\"color:#4f46e5;text-decoration:none;\">${escapeHtml(s.source || s.title)}</a>`).join(' · ') + '</div>';\n}\n\nfunction topicHtml(t, n) {\n  const row = (label, text) => text ? `<div style=\"margin-top:8px;font-size:14px;line-height:1.55;color:#3f3f46;\"><b>${label}:</b> ${escapeHtml(text)}</div>` : '';\n  return `<tr><td style=\"padding:16px 28px 4px;\">\n    <div style=\"font-size:12px;color:#a1a1aa;\">${n}. ${escapeHtml(t.subcategory || '')}</div>\n    <div style=\"font-size:17px;font-weight:700;line-height:1.35;margin-top:2px;\">${escapeHtml(t.headline)}</div>\n    <div style=\"margin-top:6px;font-size:15px;line-height:1.6;color:#27272a;\">${escapeHtml(t.summary)}</div>\n    ${row('Dlaczego to ważne', t.why_it_matters)}\n    ${row('Zastosowanie w praktyce', t.practical_use)}\n    ${row('Uwaga – rozbieżności', t.discrepancies)}\n    ${sourcesHtml(t.sources)}\n  </td></tr>`;\n}\n\nfunction renderBriefingEmail(tpl, b, opts) {\n  opts = opts || {};\n  const sections = b.sections || [];\n  const headline = sections.find((s) => s.section === 'headline');\n  const others = sections.filter((s) => s !== headline);\n  const stats = b.stats || {};\n  const audioBlock = opts.audioUrl\n    ? `<tr><td style=\"padding:20px 28px 0;\"><a href=\"${escapeHtml(opts.audioUrl)}\" style=\"display:block;background:#4f46e5;color:#fff;text-decoration:none;border-radius:10px;padding:14px 18px;font-weight:600;font-size:16px;\">▶ Posłuchaj audycji${b.audio_duration_seconds ? ' (' + formatDuration(b.audio_duration_seconds) + ')' : ''}</a>\n       <div style=\"font-size:12px;color:#71717a;margin-top:6px;\">Link ważny ${opts.signedUrlDays || 7} dni. W aplikacji NEWSFLOW nagranie jest zawsze dostępne.</div></td></tr>`\n    : '';\n  const notice = opts.notice\n    ? `<tr><td style=\"padding:16px 28px 0;\"><div style=\"background:#fef3c7;border-radius:10px;padding:12px 14px;font-size:14px;color:#92400e;\">${escapeHtml(opts.notice)}</div></td></tr>`\n    : '';\n  const headlineBlock = headline\n    ? `<tr><td style=\"padding:12px 28px 16px;\"><div style=\"border-left:4px solid #6366f1;background:#eef2ff;border-radius:8px;padding:14px 16px;\">\n        <div style=\"font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#4f46e5;\">Najważniejsza informacja dnia</div>\n        <div style=\"font-size:19px;font-weight:700;line-height:1.35;margin-top:4px;\">${escapeHtml(headline.headline)}</div>\n        <div style=\"margin-top:6px;font-size:15px;line-height:1.6;\">${escapeHtml(headline.summary)}</div>\n        ${headline.why_it_matters ? `<div style=\"margin-top:8px;font-size:14px;line-height:1.55;\"><b>Dlaczego to ważne:</b> ${escapeHtml(headline.why_it_matters)}</div>` : ''}\n        ${headline.practical_use ? `<div style=\"margin-top:8px;font-size:14px;line-height:1.55;\"><b>Zastosowanie:</b> ${escapeHtml(headline.practical_use)}</div>` : ''}\n        ${sourcesHtml(headline.sources)}</div></td></tr>`\n    : '';\n  const trends = b.trends\n    ? `<tr><td style=\"padding:16px 28px 0;\"><div style=\"font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#6366f1;\">Trendy i wnioski</div>\n       <div style=\"margin-top:6px;font-size:15px;line-height:1.6;\">${escapeHtml(b.trends)}</div></td></tr>`\n    : '';\n  const subject = `NEWSFLOW – AI Intelligence Briefing – ${b.briefing_date_pl || b.briefing_date}`;\n  const html = fillTemplate(tpl, {\n    subject: escapeHtml(subject),\n    preheader: escapeHtml((headline && headline.headline) || b.summary || ''),\n    title: escapeHtml(b.title),\n    date_long: escapeHtml(formatDatePl(b.briefing_date)),\n    lead: escapeHtml(b.summary || ''),\n    audio_block: audioBlock,\n    notice_block: notice,\n    headline_block: headlineBlock,\n    topics_block: others.map((t, i) => topicHtml(t, i + 1)).join('\\n') || '<tr><td style=\"padding:16px 28px;color:#71717a;\">Brak dodatkowych tematów.</td></tr>',\n    trends_block: trends,\n    stats_analyzed: stats.analyzed ?? b.items_analyzed ?? 0,\n    stats_rejected: stats.rejected ?? b.items_rejected ?? 0,\n    stats_incomplete: stats.incomplete ?? 0,\n    stats_collected: stats.collected ?? b.items_considered ?? 0,\n    briefing_link: escapeHtml(opts.briefingLink || '#'),\n  });\n  return { subject, html };\n}\n// ---- /lib/email.cjs ----\nconst TEMPLATE = \"<!doctype html>\\n<html lang=\\\"pl\\\">\\n<head>\\n<meta charset=\\\"utf-8\\\">\\n<meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1\\\">\\n<title>{{subject}}</title>\\n</head>\\n<body style=\\\"margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#18181b;\\\">\\n<div style=\\\"display:none;max-height:0;overflow:hidden;\\\">{{preheader}}</div>\\n<table role=\\\"presentation\\\" width=\\\"100%\\\" cellspacing=\\\"0\\\" cellpadding=\\\"0\\\" style=\\\"background:#f4f4f5;\\\">\\n<tr><td align=\\\"center\\\" style=\\\"padding:24px 12px;\\\">\\n<table role=\\\"presentation\\\" width=\\\"100%\\\" cellspacing=\\\"0\\\" cellpadding=\\\"0\\\" style=\\\"max-width:640px;background:#ffffff;border-radius:14px;overflow:hidden;\\\">\\n  <tr><td style=\\\"background:#0f172a;padding:24px 28px;color:#ffffff;\\\">\\n    <div style=\\\"font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#a5b4fc;\\\">NEWSFLOW · AI Intelligence Briefing</div>\\n    <div style=\\\"font-size:24px;font-weight:700;margin-top:6px;line-height:1.25;\\\">{{title}}</div>\\n    <div style=\\\"font-size:14px;color:#cbd5e1;margin-top:6px;\\\">{{date_long}}</div>\\n  </td></tr>\\n  {{audio_block}}\\n  {{notice_block}}\\n  <tr><td style=\\\"padding:24px 28px 8px;\\\">\\n    <div style=\\\"font-size:16px;line-height:1.6;color:#27272a;\\\">{{lead}}</div>\\n  </td></tr>\\n  {{headline_block}}\\n  <tr><td style=\\\"padding:8px 28px 0;\\\">\\n    <div style=\\\"font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#6366f1;border-bottom:1px solid #e4e4e7;padding-bottom:8px;\\\">Najważniejsze tematy</div>\\n  </td></tr>\\n  {{topics_block}}\\n  {{trends_block}}\\n  <tr><td style=\\\"padding:20px 28px;\\\">\\n    <table role=\\\"presentation\\\" width=\\\"100%\\\" style=\\\"background:#f8fafc;border-radius:10px;\\\"><tr>\\n      <td style=\\\"padding:14px 16px;font-size:13px;color:#52525b;line-height:1.6;\\\">\\n        Przeanalizowane materiały: <b>{{stats_analyzed}}</b> · Odrzucone: <b>{{stats_rejected}}</b> · Niekompletne: <b>{{stats_incomplete}}</b> · Zebrane (24 h): <b>{{stats_collected}}</b>\\n      </td></tr></table>\\n  </td></tr>\\n  <tr><td style=\\\"padding:0 28px 28px;font-size:12px;color:#71717a;line-height:1.6;\\\">\\n    <a href=\\\"{{briefing_link}}\\\" style=\\\"color:#4f46e5;\\\">Otwórz pełny briefing w aplikacji</a><br>\\n    Streszczenia i audycja zostały przygotowane automatycznie przez AI na podstawie podlinkowanych źródeł. Głos w nagraniu jest generowany przez AI (ElevenLabs).\\n    Sprawdzaj ważne informacje w oryginalnych materiałach.\\n  </td></tr>\\n</table>\\n</td></tr>\\n</table>\\n</body>\\n</html>\\n\";\nconst SUPABASE_URL = 'https://YOUR-PROJECT-REF.supabase.co';\nconst cfg = $('Load config').first().json;\nconst D = cfg.delivery || {};\nconst d = $('Prepare delivery').first().json;\nconst sign = $input.first() ? $input.first().json : {};\nconst date = $now.setZone('Europe/Warsaw').toFormat('yyyy-MM-dd');\nconst datePl = $now.setZone('Europe/Warsaw').toFormat('dd.MM.yyyy');\nif (!D.email_to || /^REPLACE/.test(D.email_to)) throw new Error('Ustaw app_config.delivery.email_to');\n\nif (d.missing) {\n  return [{ json: {\n    to: D.email_to, briefing_id: null, status: null,\n    subject: `NEWSFLOW – briefing ${datePl} nie został przygotowany`,\n    html: `<p>Dzisiejszy briefing (${escapeHtml(formatDatePl(date))}) nie został wygenerowany.</p>\n           <p>Sprawdź tabelę <code>pipeline_runs</code> w Supabase oraz historię wykonań WF03/WF04 w n8n.</p>`,\n  } }];\n}\nconst audioUrl = d.audio_path && sign && sign.signedURL ? SUPABASE_URL + '/storage/v1' + sign.signedURL : null;\nconst notice = audioUrl ? null\n  : 'Nagranie audio nie zostało dziś wygenerowane — poniżej pełna wersja tekstowa. Szczegóły w pipeline_runs (WF05).';\nconst { subject, html } = renderBriefingEmail(TEMPLATE, { ...d, briefing_date_pl: datePl }, {\n  audioUrl, notice, signedUrlDays: D.signed_url_days || 7,\n  briefingLink: (D.app_url_scheme || 'newsflow://') + 'briefing/' + d.briefing_date,\n});\nreturn [{ json: { to: D.email_to, subject, html, briefing_id: d.id, status: audioUrl ? 'delivered' : 'delivered_text_only' } }];\n"
+      }
+    },
+    {
+      "id": "c515db2d-a853-4ce0-a942-8d20c4faedd1",
+      "position": [
+        1440,
+        90
+      ],
+      "name": "Gmail: send briefing",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_GMAIL_CRED",
+          "name": "NEWSFLOW Gmail"
+        }
+      }
+    },
+    {
+      "id": "413d0764-b985-47d0-ab1d-667dd1cd646f",
+      "position": [
+        1680,
+        90
+      ],
+      "name": "Mark delivered",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/=daily_briefings?id=eq.{{ $(\"Render email\").first().json.briefing_id || '00000000-0000-0000-0000-000000000000' }}",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: $(\"Render email\").first().json.status || \"failed\", email_sent_at: $now.toISO() }) }}"
+      },
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "80e0976b-bc12-4e65-abb2-2d1342135cd7",
+      "position": [
+        1920,
+        90
+      ],
+      "name": "Run summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// NEWSFLOW — wygenerowane z n8n/src/code/wf06_run_summary.js (nie edytuj w n8n — edytuj źródło i przebuduj)\nconst r = $('Render email').first().json;\nreturn [{ json: {\n  workflow: 'WF06_delivery_archive',\n  execution_id: String($execution.id),\n  status: r.briefing_id ? (r.status === 'delivered' ? 'success' : 'partial') : 'error',\n  stats: { briefing_id: r.briefing_id, delivery_status: r.status, subject: r.subject },\n} }];\n"
+      }
+    },
+    {
+      "id": "01666963-fc86-4d24-a500-65763d393759",
+      "position": [
+        2160,
+        90
+      ],
+      "name": "Log run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/pipeline_runs",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}"
+      },
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "7782ca0b-098c-4eca-a2fc-8ee0f234fde3",
+      "name": "Opis",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -260
+      ],
+      "parameters": {
+        "content": "## WF06 – Delivery & Archive\nCodziennie 08:00: pobiera dzisiejszy briefing, tworzy podpisany link do MP3 (ważny 7 dni), renderuje e-mail (szablon `email/briefing.html`) i wysyła go przez Gmail. Brak audio ⇒ wysyła wersję tekstową z informacją o problemie. Brak briefingu ⇒ wysyła alert.\nWęzeł „Sign audio URL” celowo kończy się błędem, gdy nie ma audio (ustawienie Continue).",
+        "width": 720,
+        "height": 220
+      }
+    }
+  ],
+  "connections": {
+    "Daily 08:00": {
+      "main": [
+        [
+          {
+            "node": "Load config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run manually": {
+      "main": [
+        [
+          {
+            "node": "Load config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load config": {
+      "main": [
+        [
+          {
+            "node": "Get briefing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get briefing": {
+      "main": [
+        [
+          {
+            "node": "Prepare delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare delivery": {
+      "main": [
+        [
+          {
+            "node": "Sign audio URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign audio URL": {
+      "main": [
+        [
+          {
+            "node": "Render email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render email": {
+      "main": [
+        [
+          {
+            "node": "Gmail: send briefing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail: send briefing": {
+      "main": [
+        [
+          {
+            "node": "Mark delivered",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark delivered": {
+      "main": [
+        [
+          {
+            "node": "Run summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run summary": {
+      "main": [
+        [
+          {
+            "node": "Log run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Warsaw",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

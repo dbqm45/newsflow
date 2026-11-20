@@ -1,0 +1,87 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "lead": {
+      "type": "string"
+    },
+    "headline_story_id": {
+      "type": "string"
+    },
+    "quiet_day": {
+      "type": "boolean"
+    },
+    "topics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "story_id": {
+            "type": "string"
+          },
+          "section": {
+            "type": "string",
+            "enum": [
+              "headline",
+              "main",
+              "tools",
+              "brief"
+            ]
+          },
+          "headline": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "why_it_matters": {
+            "type": "string"
+          },
+          "practical_use": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "discrepancies": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "story_id",
+          "section",
+          "headline",
+          "summary",
+          "why_it_matters",
+          "practical_use",
+          "discrepancies"
+        ]
+      }
+    },
+    "tools_summary": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "trends": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "title",
+    "lead",
+    "headline_story_id",
+    "quiet_day",
+    "topics",
+    "tools_summary",
+    "trends"
+  ]
+}
