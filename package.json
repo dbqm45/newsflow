@@ -1,0 +1,16 @@
+{
+  "name": "newsflow-personal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NEWSFLOW Personal 0.1 — osobisty asystent informacyjny AI (n8n + Supabase + OpenAI + ElevenLabs + iOS)",
+  "type": "module",
+  "scripts": {
+    "build:n8n": "node n8n/build.mjs",
+    "test": "node n8n/build.mjs > /dev/null && node --test n8n/test/*.test.mjs",
+    "validate:sql": "./scripts/validate-sql.sh"
+  },
+  "devDependencies": {
+    "luxon": "^3.5.0"
+  },
+  "engines": { "node": ">=20" }
+}

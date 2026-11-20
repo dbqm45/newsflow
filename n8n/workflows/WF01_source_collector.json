@@ -1,0 +1,637 @@
+{
+  "name": "NEWSFLOW WF01 – Source Collector",
+  "nodes": [
+    {
+      "id": "62d761f0-4929-4136-a5ef-81118423b587",
+      "position": [
+        0,
+        0
+      ],
+      "name": "Every 2 hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 */2 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "7b23f515-4b19-47b9-a586-dfa31843efc1",
+      "position": [
+        0,
+        180
+      ],
+      "name": "Run manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "parameters": {}
+    },
+    {
+      "id": "f9250551-f563-487b-a801-b79098cbc2fe",
+      "position": [
+        240,
+        90
+      ],
+      "name": "Load config",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/rpc/get_config",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}"
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "74db4bc4-eccb-42a3-a4e9-1b8d9495e8bd",
+      "position": [
+        480,
+        0
+      ],
+      "name": "Get due sources",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/rpc/get_sources_due",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_types: [\"rss\",\"youtube\",\"medium\",\"blog\",\"web\",\"podcast\",\"reddit\"], p_force: $(\"Run manually\").isExecuted }) }}"
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "8e0e4641-f224-44fa-ade9-9ad272eabc80",
+      "position": [
+        720,
+        0
+      ],
+      "name": "Prepare sources",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// NEWSFLOW — wygenerowane z n8n/src/code/wf01_prepare_sources.js (nie edytuj w n8n — edytuj źródło i przebuduj)\n// Wejście: wynik rpc/get_sources_due. Wyjście: jedno zadanie pobrania na źródło (bez Gmail).\nreturn $input.all()\n  .map((i) => i.json)\n  .filter((s) => s && s.id && s.url && !['gmail', 'x', 'linkedin'].includes(s.type))\n  .map((s) => ({ json: s }));\n"
+      }
+    },
+    {
+      "id": "0c50a9f8-fd50-43f8-a5cb-08fa432e4a7c",
+      "position": [
+        960,
+        0
+      ],
+      "name": "Fetch feed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.url }}",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "text",
+              "outputPropertyName": "body"
+            }
+          },
+          "batching": {
+            "batch": {
+              "batchSize": 5,
+              "batchInterval": 500
+            }
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (compatible; NEWSFLOW-Personal/0.1; RSS reader)"
+            },
+            {
+              "name": "Accept",
+              "value": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*"
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "59665bf7-479f-486b-ad27-f1da73a6eee7",
+      "position": [
+        1200,
+        0
+      ],
+      "name": "Parse feeds",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// NEWSFLOW — wygenerowane z n8n/src/code/wf01_parse_feeds.js (nie edytuj w n8n — edytuj źródło i przebuduj)\n// ---- lib/text.cjs ----\n// NEWSFLOW — narzędzia tekstowe (bez zależności; działa w węźle Code n8n i w Node.js)\n\nconst ENTITIES = {\n  amp: '&', lt: '<', gt: '>', quot: '\"', apos: \"'\", nbsp: ' ', ndash: '–', mdash: '—',\n  hellip: '…', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“', laquo: '«', raquo: '»',\n  copy: '©', reg: '®', trade: '™', bull: '•', middot: '·', euro: '€', shy: '',\n};\n\nfunction decodeEntities(s) {\n  if (!s) return '';\n  return String(s).replace(/&(#x[0-9a-f]+|#\\d+|[a-z]+);/gi, (m, e) => {\n    if (e[0] === '#') {\n      const code = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);\n      return Number.isFinite(code) && code > 0 && code < 0x110000 ? String.fromCodePoint(code) : m;\n    }\n    const v = ENTITIES[e.toLowerCase()];\n    return v === undefined ? m : v;\n  });\n}\n\nfunction stripCdata(s) {\n  return String(s || '').replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g, '$1');\n}\n\nconst BLOCK_TAGS = /<\\/?(p|div|br|li|ul|ol|h[1-6]|tr|table|section|article|blockquote|pre|header|footer|figure|figcaption|hr)\\b[^>]*>/gi;\n\nfunction htmlToText(html) {\n  if (!html) return '';\n  let s = stripCdata(String(html));\n  s = s.replace(/<!--[\\s\\S]*?-->/g, ' ');\n  s = s.replace(/<(script|style|noscript|svg|iframe|template|form|button|select)\\b[\\s\\S]*?<\\/\\1>/gi, ' ');\n  s = s.replace(BLOCK_TAGS, '\\n');\n  s = s.replace(/<[^>]+>/g, ' ');\n  s = decodeEntities(s);\n  s = s.replace(/[ \\t\\f\\v ]+/g, ' ');\n  s = s.replace(/ *\\n */g, '\\n').replace(/\\n{3,}/g, '\\n\\n');\n  return s.trim();\n}\n\nfunction wordCount(s) {\n  if (!s) return 0;\n  const m = String(s).match(/[\\p{L}\\p{N}][\\p{L}\\p{N}'’-]*/gu);\n  return m ? m.length : 0;\n}\n\nfunction truncate(s, maxChars) {\n  s = String(s || '');\n  if (s.length <= maxChars) return s;\n  const cut = s.slice(0, maxChars);\n  const lastBreak = Math.max(cut.lastIndexOf('\\n'), cut.lastIndexOf('. '));\n  return (lastBreak > maxChars * 0.8 ? cut.slice(0, lastBreak + 1) : cut) + '\\n[…treść skrócona…]';\n}\n\n// Ekstrakcja głównej treści artykułu (uproszczony \"readability\").\nfunction extractArticle(html) {\n  html = String(html || '');\n  const meta = (name) => {\n    const re = new RegExp(`<meta[^>]+(?:property|name)=[\"']${name}[\"'][^>]*>`, 'i');\n    const tag = html.match(re);\n    if (!tag) return null;\n    const c = tag[0].match(/content=[\"']([^\"']*)[\"']/i);\n    return c ? decodeEntities(c[1]).trim() : null;\n  };\n  const titleTag = html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i);\n  const title = meta('og:title') || (titleTag ? htmlToText(titleTag[1]) : null);\n  const description = meta('og:description') || meta('description');\n  const published = meta('article:published_time') || meta('og:published_time');\n  const langMatch = html.match(/<html[^>]*\\blang=[\"']([a-zA-Z-]+)[\"']/i);\n\n  let body = html.replace(/<(script|style|noscript|svg|nav|aside|footer|header|form|iframe)\\b[\\s\\S]*?<\\/\\1>/gi, ' ');\n  let candidate = null;\n  const article = body.match(/<article\\b[\\s\\S]*?<\\/article>/gi);\n  if (article && article.length) {\n    candidate = article.sort((a, b) => b.length - a.length)[0];\n  } else {\n    const main = body.match(/<main\\b[\\s\\S]*?<\\/main>/i);\n    if (main) candidate = main[0];\n  }\n  let text = candidate ? htmlToText(candidate) : '';\n\n  // Fallback: zbierz akapity <p> z całej strony\n  if (wordCount(text) < 150) {\n    const paras = (body.match(/<p\\b[^>]*>[\\s\\S]*?<\\/p>/gi) || [])\n      .map(htmlToText)\n      .filter((p) => wordCount(p) >= 8);\n    const ptext = paras.join('\\n\\n');\n    if (wordCount(ptext) > wordCount(text)) text = ptext;\n  }\n  return {\n    title: title || null,\n    description: description || null,\n    published_at: published || null,\n    language: langMatch ? langMatch[1].slice(0, 2).toLowerCase() : null,\n    text,\n    word_count: wordCount(text),\n  };\n}\n\n// Napisy WebVTT/SRT -> czysty tekst\nfunction subtitlesToText(s) {\n  return String(s || '')\n    .replace(/^WEBVTT.*$/m, '')\n    .replace(/^\\d+\\s*$/gm, '')\n    .replace(/^\\s*\\d{1,2}:\\d{2}(:\\d{2})?[.,]\\d{3}\\s*-->.*$/gm, '')\n    .replace(/<[^>]+>/g, '')\n    .replace(/\\n{2,}/g, '\\n')\n    .split('\\n').map((l) => l.trim()).filter(Boolean)\n    .filter((l, i, arr) => l !== arr[i - 1])\n    .join(' ')\n    .trim();\n}\n\nconst TRACKING_PARAMS = /^(utm_[a-z]+|fbclid|gclid|mc_cid|mc_eid|ref|ref_src|source|cmpid|igshid|si|_hsenc|_hsmi|mkt_tok)$/i;\n\nfunction canonicalUrl(raw) {\n  try {\n    const u = new URL(String(raw).trim());\n    u.hash = '';\n    u.hostname = u.hostname.toLowerCase().replace(/^www\\./, '');\n    const keep = [];\n    u.searchParams.forEach((v, k) => { if (!TRACKING_PARAMS.test(k)) keep.push([k, v]); });\n    keep.sort((a, b) => a[0].localeCompare(b[0]));\n    u.search = keep.length ? '?' + keep.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&') : '';\n    if (u.hostname === 'youtube.com' || u.hostname === 'm.youtube.com') {\n      const v = new URL(String(raw)).searchParams.get('v');\n      if (v) return `https://youtube.com/watch?v=${v}`;\n    }\n    if (u.hostname === 'youtu.be') return `https://youtube.com/watch?v=${u.pathname.slice(1)}`;\n    if (u.pathname.length > 1 && u.pathname.endsWith('/')) u.pathname = u.pathname.replace(/\\/+$/, '');\n    return u.toString().replace(/^http:\\/\\//, 'https://');\n  } catch (e) {\n    return String(raw || '').trim();\n  }\n}\n\n// SHA-256 (czysty JS) — n8n Cloud nie zawsze udostępnia moduł crypto\nfunction sha256(ascii) {\n  const utf8 = unescape(encodeURIComponent(String(ascii)));\n  const K = [];\n  const H = [];\n  let primeCounter = 0;\n  const isComposite = {};\n  for (let candidate = 2; primeCounter < 64; candidate++) {\n    if (!isComposite[candidate]) {\n      for (let i = candidate * candidate; i < 313; i += candidate) isComposite[i] = candidate;\n      if (primeCounter < 8) H[primeCounter] = (Math.pow(candidate, 0.5) * 0x100000000) | 0;\n      K[primeCounter++] = (Math.pow(candidate, 1 / 3) * 0x100000000) | 0;\n    }\n  }\n  const words = [];\n  const bitLen = utf8.length * 8;\n  let s = utf8 + '\\x80';\n  while ((s.length % 64) - 56) s += '\\x00';\n  for (let i = 0; i < s.length; i++) words[i >> 2] |= s.charCodeAt(i) << (((3 - i) % 4) * 8);\n  words[words.length] = (bitLen / 0x100000000) | 0;\n  words[words.length] = bitLen | 0;\n  const rr = (v, n) => (v >>> n) | (v << (32 - n));\n  let hash = H.slice(0, 8);\n  for (let j = 0; j < words.length;) {\n    const w = words.slice(j, (j += 16));\n    const old = hash;\n    hash = hash.slice(0, 8);\n    for (let i = 0; i < 64; i++) {\n      const w15 = w[i - 15], w2 = w[i - 2];\n      const a = hash[0], e = hash[4];\n      const t1 = hash[7] + (rr(e, 6) ^ rr(e, 11) ^ rr(e, 25)) + ((e & hash[5]) ^ (~e & hash[6])) + K[i] +\n        (w[i] = i < 16 ? w[i] : (w[i - 16] + (rr(w15, 7) ^ rr(w15, 18) ^ (w15 >>> 3)) + w[i - 7] +\n          (rr(w2, 17) ^ rr(w2, 19) ^ (w2 >>> 10))) | 0);\n      const t2 = (rr(a, 2) ^ rr(a, 13) ^ rr(a, 22)) + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));\n      hash = [(t1 + t2) | 0].concat(hash);\n      hash[4] = (hash[4] + t1) | 0;\n    }\n    for (let i = 0; i < 8; i++) hash[i] = (hash[i] + old[i]) | 0;\n  }\n  let out = '';\n  for (let i = 0; i < 8; i++) for (let j = 3; j + 1; j--) {\n    const b = (hash[i] >> (j * 8)) & 255;\n    out += (b < 16 ? '0' : '') + b.toString(16);\n  }\n  return out;\n}\n// ---- /lib/text.cjs ----\n// ---- lib/feed.cjs ----\n// NEWSFLOW — parser RSS 2.0 / Atom / YouTube / Reddit / podcastów (bez zależności).\n// Wymaga: text.cjs (decodeEntities, stripCdata, htmlToText)\n\nfunction _tag(block, name) {\n  const re = new RegExp(`<${name}(?:\\\\s[^>]*)?>([\\\\s\\\\S]*?)<\\\\/${name}>`, 'i');\n  const m = block.match(re);\n  return m ? decodeEntities(stripCdata(m[1])).trim() : null;\n}\nfunction _rawTag(block, name) {\n  const re = new RegExp(`<${name}(?:\\\\s[^>]*)?>([\\\\s\\\\S]*?)<\\\\/${name}>`, 'i');\n  const m = block.match(re);\n  return m ? stripCdata(m[1]).trim() : null;\n}\nfunction _attr(block, tagName, attr, where) {\n  const re = new RegExp(`<${tagName}\\\\b[^>]*>`, 'gi');\n  const tags = block.match(re) || [];\n  for (const t of tags) {\n    if (where && !where(t)) continue;\n    const m = t.match(new RegExp(`\\\\b${attr}=[\"']([^\"']*)[\"']`, 'i'));\n    if (m) return decodeEntities(m[1]);\n  }\n  return null;\n}\nfunction _date(s) {\n  if (!s) return null;\n  const d = new Date(s);\n  return isNaN(d.getTime()) ? null : d.toISOString();\n}\nfunction _duration(s) {\n  if (!s) return null;\n  if (/^\\d+$/.test(s)) return parseInt(s, 10);\n  const p = s.split(':').map(Number);\n  if (p.some(isNaN)) return null;\n  return p.reduce((acc, v) => acc * 60 + v, 0);\n}\n\nfunction parseFeed(xml, opts) {\n  opts = opts || {};\n  const maxItems = opts.maxItems || 30;\n  xml = String(xml || '');\n  const isAtom = /<feed\\b[^>]*xmlns=[\"']http:\\/\\/www\\.w3\\.org\\/2005\\/Atom[\"']/i.test(xml) || (/<entry\\b/i.test(xml) && !/<item\\b/i.test(xml));\n  const blocks = xml.match(isAtom ? /<entry\\b[\\s\\S]*?<\\/entry>/gi : /<item\\b[\\s\\S]*?<\\/item>/gi) || [];\n  const items = [];\n  for (const b of blocks.slice(0, maxItems)) {\n    let url, externalId, description, content, author, published, mediaUrl = null, transcriptUrl = null, duration = null;\n    const title = htmlToText(_tag(b, 'title') || '');\n    if (isAtom) {\n      url = _attr(b, 'link', 'href', (t) => !/rel=[\"'](?!alternate)/i.test(t)) || _attr(b, 'link', 'href');\n      externalId = _tag(b, 'yt:videoId') || _tag(b, 'id');\n      const rawContent = _rawTag(b, 'content');\n      content = rawContent ? htmlToText(decodeEntities(rawContent)) : null;\n      description = htmlToText(_tag(b, 'media:description') || _tag(b, 'summary') || '');\n      author = _tag(b, 'name');\n      published = _tag(b, 'published') || _tag(b, 'updated');\n    } else {\n      url = _tag(b, 'link') || _attr(b, 'link', 'href');\n      externalId = _tag(b, 'guid') || url;\n      const rawContent = _rawTag(b, 'content:encoded');\n      content = rawContent ? htmlToText(decodeEntities(rawContent)) : null;\n      description = htmlToText(decodeEntities(_rawTag(b, 'description') || _rawTag(b, 'itunes:summary') || ''));\n      author = _tag(b, 'dc:creator') || _tag(b, 'author') || _tag(b, 'itunes:author');\n      published = _tag(b, 'pubDate') || _tag(b, 'dc:date');\n      mediaUrl = _attr(b, 'enclosure', 'url');\n      transcriptUrl = _attr(b, 'podcast:transcript', 'url', (t) => /text\\/(plain|html|vtt)|application\\/(x-subrip|srt)/i.test(t)) ||\n        _attr(b, 'podcast:transcript', 'url');\n      duration = _duration(_tag(b, 'itunes:duration'));\n    }\n    if (!url || !title) continue;\n    items.push({\n      external_id: externalId ? String(externalId).slice(0, 500) : null,\n      title: title.slice(0, 500),\n      url: url.trim(),\n      author: author ? author.slice(0, 200) : null,\n      published_at: _date(published),\n      description: description ? description.slice(0, 5000) : null,\n      content: content || null,\n      media_url: mediaUrl,\n      transcript_url: transcriptUrl,\n      duration_seconds: duration,\n    });\n  }\n  return { format: isAtom ? 'atom' : 'rss', items };\n}\n// ---- /lib/feed.cjs ----\nconst cfg = $('Load config').first().json;\nconst P = cfg.pipeline || {};\nconst maxAgeMs = (P.max_item_age_days || 4) * 86400000;\nconst sources = $('Prepare sources').all().map((i) => i.json);\nconst responses = $input.all();\nconst rows = [];\nconst results = [];\nconst seen = new Set();\n\nsources.forEach((src, idx) => {\n  const r = responses[idx] ? responses[idx].json : null;\n  const body = r && (typeof r.body === 'string' ? r.body : r.data);\n  if (!r || r.error || typeof body !== 'string' || !body.trim()) {\n    const err = r && r.error ? (r.error.message || JSON.stringify(r.error)) : 'Pusta odpowiedź';\n    results.push({ p_source_id: src.id, p_ok: false, p_error: String(err).slice(0, 1000) });\n    return;\n  }\n  let parsed;\n  try {\n    parsed = parseFeed(body, { maxItems: (src.configuration && src.configuration.max_items) || 25 });\n  } catch (e) {\n    results.push({ p_source_id: src.id, p_ok: false, p_error: 'Błąd parsowania: ' + e.message });\n    return;\n  }\n  if (!parsed.items.length) {\n    results.push({ p_source_id: src.id, p_ok: false, p_error: 'Brak pozycji w feedzie (zmieniony adres?)' });\n    return;\n  }\n  for (const it of parsed.items) {\n    if (it.published_at && Date.now() - Date.parse(it.published_at) > maxAgeMs) continue;\n    const canon = canonicalUrl(it.url);\n    const hash = sha256(canon);\n    if (seen.has(hash)) continue;\n    seen.add(hash);\n    rows.push({\n      source_id: src.id,\n      external_id: it.external_id,\n      title: it.title,\n      original_url: it.url,\n      author: it.author,\n      published_at: it.published_at,\n      description: it.description,\n      original_content: it.content,\n      content_hash: hash,\n      language: src.language,\n      visibility: src.visibility || 'public',\n      word_count: wordCount(it.content || it.description),\n      metadata: {\n        canonical_url: canon,\n        media_url: it.media_url,\n        transcript_url: it.transcript_url,\n        duration_seconds: it.duration_seconds,\n        feed_format: parsed.format,\n      },\n    });\n  }\n  results.push({ p_source_id: src.id, p_ok: true, p_error: null });\n});\n\nreturn [{ json: { rows, results, stats: { sources: sources.length, items_seen: rows.length, failed_sources: results.filter((r) => !r.p_ok).length } } }];\n"
+      }
+    },
+    {
+      "id": "0b3046a0-e9ab-46c8-acdc-f1058611abb0",
+      "position": [
+        1440,
+        0
+      ],
+      "name": "Insert new items",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/content_items?on_conflict=content_hash",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=ignore-duplicates,return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.rows) }}"
+      },
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "f9a2e999-fa0d-481f-af0e-cda4c82e4f12",
+      "position": [
+        1680,
+        0
+      ],
+      "name": "Source results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// NEWSFLOW — wygenerowane z n8n/src/code/wf01_source_results.js (nie edytuj w n8n — edytuj źródło i przebuduj)\nreturn $('Parse feeds').first().json.results.map((r) => ({ json: r }));\n"
+      }
+    },
+    {
+      "id": "2451d0ee-4b97-4317-aa3f-5fa19e78508a",
+      "position": [
+        1920,
+        0
+      ],
+      "name": "Mark source checked",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/rpc/mark_source_checked",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}"
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "89ba12aa-d869-4a2a-a150-da9daadf7e30",
+      "position": [
+        2160,
+        0
+      ],
+      "name": "Run summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// NEWSFLOW — wygenerowane z n8n/src/code/wf01_run_summary.js (nie edytuj w n8n — edytuj źródło i przebuduj)\nconst s = $('Parse feeds').first().json.stats;\nreturn [{ json: {\n  workflow: 'WF01_source_collector',\n  execution_id: String($execution.id),\n  status: s.failed_sources ? 'partial' : 'success',\n  stats: s,\n} }];\n"
+      }
+    },
+    {
+      "id": "2a7c759f-d2f5-4152-a508-f99319296e45",
+      "position": [
+        2400,
+        0
+      ],
+      "name": "Log run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/pipeline_runs",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}"
+      },
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "9f233dc0-e10e-4b29-a53a-cde214744b5d",
+      "position": [
+        480,
+        270
+      ],
+      "name": "Get Gmail source",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "GET",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/sources?type=eq.gmail&active=eq.true&select=id,visibility,configuration&limit=1",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth"
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "e26449bc-1332-4689-a05c-484c07675c65",
+      "position": [
+        720,
+        270
+      ],
+      "name": "Gmail: AI-READ",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "disabled": true,
+      "notes": "Włącz po skonfigurowaniu credentials. Wybierz etykietę AI-READ z listy (pole Label IDs).",
+      "parameters": {
+        "resource": "message",
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 30,
+        "simple": false,
+        "filters": {
+          "labelIds": [
+            "REPLACE_WITH_AI_READ_LABEL_ID"
+          ],
+          "q": "newer_than:2d"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_GMAIL_CRED",
+          "name": "NEWSFLOW Gmail"
+        }
+      }
+    },
+    {
+      "id": "f807e4e5-b54b-49eb-ac0f-ef870de515eb",
+      "position": [
+        960,
+        270
+      ],
+      "name": "Normalize newsletters",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// NEWSFLOW — wygenerowane z n8n/src/code/wf01_normalize_newsletters.js (nie edytuj w n8n — edytuj źródło i przebuduj)\n// ---- lib/text.cjs ----\n// NEWSFLOW — narzędzia tekstowe (bez zależności; działa w węźle Code n8n i w Node.js)\n\nconst ENTITIES = {\n  amp: '&', lt: '<', gt: '>', quot: '\"', apos: \"'\", nbsp: ' ', ndash: '–', mdash: '—',\n  hellip: '…', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“', laquo: '«', raquo: '»',\n  copy: '©', reg: '®', trade: '™', bull: '•', middot: '·', euro: '€', shy: '',\n};\n\nfunction decodeEntities(s) {\n  if (!s) return '';\n  return String(s).replace(/&(#x[0-9a-f]+|#\\d+|[a-z]+);/gi, (m, e) => {\n    if (e[0] === '#') {\n      const code = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);\n      return Number.isFinite(code) && code > 0 && code < 0x110000 ? String.fromCodePoint(code) : m;\n    }\n    const v = ENTITIES[e.toLowerCase()];\n    return v === undefined ? m : v;\n  });\n}\n\nfunction stripCdata(s) {\n  return String(s || '').replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g, '$1');\n}\n\nconst BLOCK_TAGS = /<\\/?(p|div|br|li|ul|ol|h[1-6]|tr|table|section|article|blockquote|pre|header|footer|figure|figcaption|hr)\\b[^>]*>/gi;\n\nfunction htmlToText(html) {\n  if (!html) return '';\n  let s = stripCdata(String(html));\n  s = s.replace(/<!--[\\s\\S]*?-->/g, ' ');\n  s = s.replace(/<(script|style|noscript|svg|iframe|template|form|button|select)\\b[\\s\\S]*?<\\/\\1>/gi, ' ');\n  s = s.replace(BLOCK_TAGS, '\\n');\n  s = s.replace(/<[^>]+>/g, ' ');\n  s = decodeEntities(s);\n  s = s.replace(/[ \\t\\f\\v ]+/g, ' ');\n  s = s.replace(/ *\\n */g, '\\n').replace(/\\n{3,}/g, '\\n\\n');\n  return s.trim();\n}\n\nfunction wordCount(s) {\n  if (!s) return 0;\n  const m = String(s).match(/[\\p{L}\\p{N}][\\p{L}\\p{N}'’-]*/gu);\n  return m ? m.length : 0;\n}\n\nfunction truncate(s, maxChars) {\n  s = String(s || '');\n  if (s.length <= maxChars) return s;\n  const cut = s.slice(0, maxChars);\n  const lastBreak = Math.max(cut.lastIndexOf('\\n'), cut.lastIndexOf('. '));\n  return (lastBreak > maxChars * 0.8 ? cut.slice(0, lastBreak + 1) : cut) + '\\n[…treść skrócona…]';\n}\n\n// Ekstrakcja głównej treści artykułu (uproszczony \"readability\").\nfunction extractArticle(html) {\n  html = String(html || '');\n  const meta = (name) => {\n    const re = new RegExp(`<meta[^>]+(?:property|name)=[\"']${name}[\"'][^>]*>`, 'i');\n    const tag = html.match(re);\n    if (!tag) return null;\n    const c = tag[0].match(/content=[\"']([^\"']*)[\"']/i);\n    return c ? decodeEntities(c[1]).trim() : null;\n  };\n  const titleTag = html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i);\n  const title = meta('og:title') || (titleTag ? htmlToText(titleTag[1]) : null);\n  const description = meta('og:description') || meta('description');\n  const published = meta('article:published_time') || meta('og:published_time');\n  const langMatch = html.match(/<html[^>]*\\blang=[\"']([a-zA-Z-]+)[\"']/i);\n\n  let body = html.replace(/<(script|style|noscript|svg|nav|aside|footer|header|form|iframe)\\b[\\s\\S]*?<\\/\\1>/gi, ' ');\n  let candidate = null;\n  const article = body.match(/<article\\b[\\s\\S]*?<\\/article>/gi);\n  if (article && article.length) {\n    candidate = article.sort((a, b) => b.length - a.length)[0];\n  } else {\n    const main = body.match(/<main\\b[\\s\\S]*?<\\/main>/i);\n    if (main) candidate = main[0];\n  }\n  let text = candidate ? htmlToText(candidate) : '';\n\n  // Fallback: zbierz akapity <p> z całej strony\n  if (wordCount(text) < 150) {\n    const paras = (body.match(/<p\\b[^>]*>[\\s\\S]*?<\\/p>/gi) || [])\n      .map(htmlToText)\n      .filter((p) => wordCount(p) >= 8);\n    const ptext = paras.join('\\n\\n');\n    if (wordCount(ptext) > wordCount(text)) text = ptext;\n  }\n  return {\n    title: title || null,\n    description: description || null,\n    published_at: published || null,\n    language: langMatch ? langMatch[1].slice(0, 2).toLowerCase() : null,\n    text,\n    word_count: wordCount(text),\n  };\n}\n\n// Napisy WebVTT/SRT -> czysty tekst\nfunction subtitlesToText(s) {\n  return String(s || '')\n    .replace(/^WEBVTT.*$/m, '')\n    .replace(/^\\d+\\s*$/gm, '')\n    .replace(/^\\s*\\d{1,2}:\\d{2}(:\\d{2})?[.,]\\d{3}\\s*-->.*$/gm, '')\n    .replace(/<[^>]+>/g, '')\n    .replace(/\\n{2,}/g, '\\n')\n    .split('\\n').map((l) => l.trim()).filter(Boolean)\n    .filter((l, i, arr) => l !== arr[i - 1])\n    .join(' ')\n    .trim();\n}\n\nconst TRACKING_PARAMS = /^(utm_[a-z]+|fbclid|gclid|mc_cid|mc_eid|ref|ref_src|source|cmpid|igshid|si|_hsenc|_hsmi|mkt_tok)$/i;\n\nfunction canonicalUrl(raw) {\n  try {\n    const u = new URL(String(raw).trim());\n    u.hash = '';\n    u.hostname = u.hostname.toLowerCase().replace(/^www\\./, '');\n    const keep = [];\n    u.searchParams.forEach((v, k) => { if (!TRACKING_PARAMS.test(k)) keep.push([k, v]); });\n    keep.sort((a, b) => a[0].localeCompare(b[0]));\n    u.search = keep.length ? '?' + keep.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&') : '';\n    if (u.hostname === 'youtube.com' || u.hostname === 'm.youtube.com') {\n      const v = new URL(String(raw)).searchParams.get('v');\n      if (v) return `https://youtube.com/watch?v=${v}`;\n    }\n    if (u.hostname === 'youtu.be') return `https://youtube.com/watch?v=${u.pathname.slice(1)}`;\n    if (u.pathname.length > 1 && u.pathname.endsWith('/')) u.pathname = u.pathname.replace(/\\/+$/, '');\n    return u.toString().replace(/^http:\\/\\//, 'https://');\n  } catch (e) {\n    return String(raw || '').trim();\n  }\n}\n\n// SHA-256 (czysty JS) — n8n Cloud nie zawsze udostępnia moduł crypto\nfunction sha256(ascii) {\n  const utf8 = unescape(encodeURIComponent(String(ascii)));\n  const K = [];\n  const H = [];\n  let primeCounter = 0;\n  const isComposite = {};\n  for (let candidate = 2; primeCounter < 64; candidate++) {\n    if (!isComposite[candidate]) {\n      for (let i = candidate * candidate; i < 313; i += candidate) isComposite[i] = candidate;\n      if (primeCounter < 8) H[primeCounter] = (Math.pow(candidate, 0.5) * 0x100000000) | 0;\n      K[primeCounter++] = (Math.pow(candidate, 1 / 3) * 0x100000000) | 0;\n    }\n  }\n  const words = [];\n  const bitLen = utf8.length * 8;\n  let s = utf8 + '\\x80';\n  while ((s.length % 64) - 56) s += '\\x00';\n  for (let i = 0; i < s.length; i++) words[i >> 2] |= s.charCodeAt(i) << (((3 - i) % 4) * 8);\n  words[words.length] = (bitLen / 0x100000000) | 0;\n  words[words.length] = bitLen | 0;\n  const rr = (v, n) => (v >>> n) | (v << (32 - n));\n  let hash = H.slice(0, 8);\n  for (let j = 0; j < words.length;) {\n    const w = words.slice(j, (j += 16));\n    const old = hash;\n    hash = hash.slice(0, 8);\n    for (let i = 0; i < 64; i++) {\n      const w15 = w[i - 15], w2 = w[i - 2];\n      const a = hash[0], e = hash[4];\n      const t1 = hash[7] + (rr(e, 6) ^ rr(e, 11) ^ rr(e, 25)) + ((e & hash[5]) ^ (~e & hash[6])) + K[i] +\n        (w[i] = i < 16 ? w[i] : (w[i - 16] + (rr(w15, 7) ^ rr(w15, 18) ^ (w15 >>> 3)) + w[i - 7] +\n          (rr(w2, 17) ^ rr(w2, 19) ^ (w2 >>> 10))) | 0);\n      const t2 = (rr(a, 2) ^ rr(a, 13) ^ rr(a, 22)) + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));\n      hash = [(t1 + t2) | 0].concat(hash);\n      hash[4] = (hash[4] + t1) | 0;\n    }\n    for (let i = 0; i < 8; i++) hash[i] = (hash[i] + old[i]) | 0;\n  }\n  let out = '';\n  for (let i = 0; i < 8; i++) for (let j = 3; j + 1; j--) {\n    const b = (hash[i] >> (j * 8)) & 255;\n    out += (b < 16 ? '0' : '') + b.toString(16);\n  }\n  return out;\n}\n// ---- /lib/text.cjs ----\n// Wejście: wiadomości z węzła Gmail (etykieta AI-READ). Jeśli węzeł Gmail jest wyłączony,\n// dostajemy tu wiersz źródła — wtedy nic nie robimy.\nconst src = $('Get Gmail source').first().json;\nconst msgs = $input.all().map((i) => i.json)\n  .filter((m) => m && m.id && m.subject !== undefined && (m.html || m.text || m.textAsHtml));\nif (!msgs.length) return [];\n\nconst SKIP_LINK = /unsubscribe|wypisz|manage.*preferences|mailto:|list-manage|\\/open\\?|pixel|tracking|view.*browser|privacy|facebook\\.com|twitter\\.com\\/intent|linkedin\\.com\\/share/i;\nconst rows = msgs.map((m) => {\n  const htmlText = htmlToText(m.html || m.textAsHtml || '');\n  const text = wordCount(m.text) > wordCount(htmlText) * 0.7 ? String(m.text) : htmlText;\n  const links = [];\n  const re = /href=[\"'](https?:\\/\\/[^\"']+)[\"']/gi;\n  let mm;\n  while ((mm = re.exec(m.html || '')) && links.length < 40) {\n    const u = decodeEntities(mm[1]);\n    if (!SKIP_LINK.test(u) && !links.includes(u)) links.push(u);\n  }\n  const from = m.from && (m.from.text || (m.from.value && m.from.value[0] && (m.from.value[0].name || m.from.value[0].address)));\n  const d = m.date ? new Date(m.date) : new Date();\n  return {\n    source_id: src.id,\n    external_id: String(m.id),\n    title: String(m.subject || '(bez tematu)').slice(0, 500),\n    original_url: 'https://mail.google.com/mail/u/0/#all/' + (m.threadId || m.id),\n    author: from ? String(from).slice(0, 200) : null,\n    published_at: isNaN(d.getTime()) ? null : d.toISOString(),\n    description: text.slice(0, 500),\n    original_content: truncate(text, 60000),\n    content_hash: sha256('gmail:' + (m.messageId || m.id)),\n    language: null,\n    visibility: 'private',\n    word_count: wordCount(text),\n    extraction_status: 'extracted',\n    metadata: { gmail_id: m.id, links, newsletter: true },\n  };\n});\nreturn [{ json: { rows, count: rows.length } }];\n"
+      }
+    },
+    {
+      "id": "47d0f6a8-2423-4be5-a191-8d2c2a810487",
+      "position": [
+        1200,
+        270
+      ],
+      "name": "Insert newsletters",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/content_items?on_conflict=content_hash",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=ignore-duplicates,return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.rows) }}"
+      },
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "e0420318-75ef-4f70-abb4-16cad3184b58",
+      "position": [
+        1440,
+        270
+      ],
+      "name": "Mark Gmail checked",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/rpc/mark_source_checked",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_source_id: $(\"Get Gmail source\").first().json.id, p_ok: true }) }}"
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "849c6540-3d78-42c0-abbf-5c4f5df901ff",
+      "name": "Opis",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -260
+      ],
+      "parameters": {
+        "content": "## WF01 – Source Collector\nCo 2 h: pobiera źródła z `get_sources_due` (RSS, YouTube, Medium, blogi, Reddit, podcasty), parsuje feedy, deduplikuje po `content_hash` (sha256 kanonicznego URL) i zapisuje nowe materiały jako `pending`.\nGałąź Gmail (etykieta **AI-READ**) jest **wyłączona** do czasu skonfigurowania credentials i ID etykiety.\nKolejny krok: WF02 przetwarza materiały ze statusem `pending`.",
+        "width": 720,
+        "height": 220
+      }
+    }
+  ],
+  "connections": {
+    "Every 2 hours": {
+      "main": [
+        [
+          {
+            "node": "Load config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run manually": {
+      "main": [
+        [
+          {
+            "node": "Load config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load config": {
+      "main": [
+        [
+          {
+            "node": "Get due sources",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Gmail source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get due sources": {
+      "main": [
+        [
+          {
+            "node": "Prepare sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare sources": {
+      "main": [
+        [
+          {
+            "node": "Fetch feed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch feed": {
+      "main": [
+        [
+          {
+            "node": "Parse feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse feeds": {
+      "main": [
+        [
+          {
+            "node": "Insert new items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert new items": {
+      "main": [
+        [
+          {
+            "node": "Source results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Source results": {
+      "main": [
+        [
+          {
+            "node": "Mark source checked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark source checked": {
+      "main": [
+        [
+          {
+            "node": "Run summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run summary": {
+      "main": [
+        [
+          {
+            "node": "Log run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Gmail source": {
+      "main": [
+        [
+          {
+            "node": "Gmail: AI-READ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail: AI-READ": {
+      "main": [
+        [
+          {
+            "node": "Normalize newsletters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize newsletters": {
+      "main": [
+        [
+          {
+            "node": "Insert newsletters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert newsletters": {
+      "main": [
+        [
+          {
+            "node": "Mark Gmail checked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Warsaw",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

@@ -1,0 +1,836 @@
+{
+  "name": "NEWSFLOW WF05 – Audio Generator",
+  "nodes": [
+    {
+      "id": "f49e37a9-c4a4-4385-abfb-a89b72a0a175",
+      "position": [
+        0,
+        0
+      ],
+      "name": "Daily 07:25",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "25 7 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a2601e1c-8598-447a-ab27-f2cbcf3eb363",
+      "position": [
+        0,
+        180
+      ],
+      "name": "Run manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "parameters": {}
+    },
+    {
+      "id": "eca5be56-1f78-4a14-a0c2-03554c16085c",
+      "position": [
+        240,
+        90
+      ],
+      "name": "Load config",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/rpc/get_config",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}"
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "ca84de0b-32e6-45c5-a49b-3701081a7cd8",
+      "position": [
+        480,
+        90
+      ],
+      "name": "Check budget",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/rpc/check_budget",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_provider: \"elevenlabs\" }) }}"
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "3152e4d6-7f1e-4625-a4f1-e360599002a7",
+      "position": [
+        720,
+        90
+      ],
+      "name": "Budget gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// NEWSFLOW — wygenerowane z n8n/src/code/wf05_budget_gate.js (nie edytuj w n8n — edytuj źródło i przebuduj)\nconst budget = $input.first().json;\nif (!budget.allowed) throw new Error('Limit kosztów ElevenLabs osiągnięty — briefing zostanie dostarczony bez audio. ' + JSON.stringify(budget));\nreturn [{ json: { budget } }];\n"
+      }
+    },
+    {
+      "id": "f76226ce-38a3-4b39-a1ce-aa0d9b12b1eb",
+      "position": [
+        960,
+        90
+      ],
+      "name": "Get briefing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "GET",
+        "url": "=https://YOUR-PROJECT-REF.supabase.co/rest/v1/daily_briefings?briefing_date=eq.{{ $now.setZone('Europe/Warsaw').toFormat('yyyy-MM-dd') }}&edition=eq.ai-daily&status=in.(script_ready,audio_failed,audio_generating)&select=id,briefing_date,title,script&limit=1",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth"
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "3cf62b41-4f6b-4d14-aa63-236c56171333",
+      "position": [
+        1200,
+        90
+      ],
+      "name": "Mark generating",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/=daily_briefings?id=eq.{{ $json.id }}",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: \"audio_generating\" }) }}"
+      },
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "81ac71be-1e8c-43b9-ae6a-651b6a14e613",
+      "position": [
+        1440,
+        90
+      ],
+      "name": "Prepare TTS",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// NEWSFLOW — wygenerowane z n8n/src/code/wf05_prepare_tts.js (nie edytuj w n8n — edytuj źródło i przebuduj)\n// ---- lib/tts.cjs ----\n// NEWSFLOW — przygotowanie tekstu do syntezy mowy i obliczenia audio.\n\n// Normalizacja tekstu pod odsłuch po polsku (skróty, symbole, URL-e).\nfunction prepareForSpeech(text) {\n  let s = String(text || '');\n  s = s.replace(/https?:\\/\\/[^\\s,;)]+/g, '').replace(/\\s+([,.;:])/g, '$1'); // linki nie są czytane\n  s = s.replace(/[*_#`>|]/g, '');                     // markdown\n  s = s.replace(/\\s*[–—]\\s*/g, ' – ');\n  s = s.replace(/(\\d)\\s?%/g, '$1 procent');\n  s = s.replace(/\\$\\s?(\\d[\\d.,]*)\\s?(mld|mln|tys\\.)?/g, (m, n, u) => `${n}${u ? ' ' + u : ''} dolarów`);\n  s = s.replace(/€\\s?(\\d[\\d.,]*)/g, '$1 euro');\n  s = s.replace(/\\bnp\\./g, 'na przykład').replace(/\\bm\\.in\\./g, 'między innymi').replace(/\\btzw\\./g, 'tak zwany');\n  s = s.replace(/\\bitd\\./g, 'i tak dalej').replace(/\\bok\\.\\s(?=\\d)/g, 'około ');\n  s = s.replace(/\\bAI\\b/g, 'AI').replace(/\\bvs\\.?\\b/g, 'kontra');\n  s = s.replace(/[ \\t]+/g, ' ').replace(/\\n{3,}/g, '\\n\\n').trim();\n  return s;\n}\n\n// Dzieli tekst na fragmenty <= maxChars, wyłącznie na granicach zdań/akapitów.\nfunction chunkText(text, maxChars) {\n  maxChars = maxChars || 2500;\n  const paragraphs = String(text || '').split(/\\n{2,}/).map((p) => p.trim()).filter(Boolean);\n  const chunks = [];\n  let cur = '';\n  const push = () => { if (cur.trim()) chunks.push(cur.trim()); cur = ''; };\n  for (const p of paragraphs) {\n    if ((cur + '\\n\\n' + p).length <= maxChars) { cur = cur ? cur + '\\n\\n' + p : p; continue; }\n    push();\n    if (p.length <= maxChars) { cur = p; continue; }\n    const sentences = p.match(/[^.!?…]+[.!?…]+[\"”»)]*\\s*|[^.!?…]+$/g) || [p];\n    for (const s of sentences) {\n      if ((cur + s).length > maxChars) push();\n      if (s.length > maxChars) { for (let i = 0; i < s.length; i += maxChars) chunks.push(s.slice(i, i + maxChars).trim()); continue; }\n      cur += s;\n    }\n  }\n  push();\n  return chunks;\n}\n\n// Bitrate z formatu ElevenLabs, np. \"mp3_44100_96\" -> 96\nfunction bitrateFromFormat(fmt) {\n  const m = String(fmt || '').match(/^mp3_\\d+_(\\d+)$/);\n  return m ? parseInt(m[1], 10) : 128;\n}\n\n// Czas trwania MP3 CBR na podstawie rozmiaru\nfunction mp3DurationSeconds(bytes, kbps) {\n  return Math.round((bytes * 8) / (kbps * 1000) * 100) / 100;\n}\n\n// Usuwa nagłówek ID3v2 (przy sklejaniu fragmentów zostawiamy tylko pierwszy)\nfunction stripId3(buf) {\n  if (buf.length > 10 && buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) {\n    const size = ((buf[6] & 0x7f) << 21) | ((buf[7] & 0x7f) << 14) | ((buf[8] & 0x7f) << 7) | (buf[9] & 0x7f);\n    return buf.subarray(10 + size);\n  }\n  return buf;\n}\n\n// Rozdziały z czasami startu\nfunction buildChapters(parts) {\n  let t = 0;\n  return parts.map((p, i) => {\n    const ch = { index: i, title: p.title, start_seconds: Math.round(t * 100) / 100, duration_seconds: p.duration_seconds, audio_asset_id: p.audio_asset_id || null, story_ids: p.story_ids || [] };\n    t += p.duration_seconds;\n    return ch;\n  });\n}\n// ---- /lib/tts.cjs ----\nconst cfg = $('Load config').first().json;\nconst el = cfg.elevenlabs || {};\nconst b = $('Get briefing').first().json;\nconst budget = $('Budget gate').first().json.budget;\nif (!el.voice_id || /^REPLACE/.test(el.voice_id)) throw new Error('Ustaw app_config.elevenlabs.voice_id (polski głos z ElevenLabs Voice Library)');\nif (!b.script || !Array.isArray(b.script.chapters) || !b.script.chapters.length) throw new Error('Briefing nie ma scenariusza audio');\n\nconst items = [];\nb.script.chapters.forEach((ch, ci) => {\n  const text = prepareForSpeech(ch.text);\n  chunkText(text, el.max_chunk_chars || 2500).forEach((chunk, k) => {\n    items.push({ briefing_id: b.id, briefing_date: b.briefing_date, chapter_index: ci, chunk_index: k,\n      chapter_title: ch.title, chapter_kind: ch.kind, story_ids: ch.story_ids || [], text: chunk });\n  });\n});\nconst totalChars = items.reduce((a, it) => a + it.text.length, 0);\nconst monthlyLimit = budget.limits && budget.limits.monthly_characters;\nif (monthlyLimit && Number(budget.month_characters) + totalChars > monthlyLimit) {\n  throw new Error(`Przekroczony miesięczny limit znaków ElevenLabs (${budget.month_characters} + ${totalChars} > ${monthlyLimit})`);\n}\nconst modelId = el.model_id || 'eleven_multilingual_v2';\nreturn items.map((it, i) => {\n  const body = { text: it.text, model_id: modelId, voice_settings: el.voice_settings || {} };\n  if (i > 0 && items[i - 1].chapter_index === it.chapter_index) body.previous_text = items[i - 1].text.slice(-400);\n  if (i < items.length - 1 && items[i + 1].chapter_index === it.chapter_index) body.next_text = items[i + 1].text.slice(0, 400);\n  if (/flash|turbo|v3/.test(modelId)) body.language_code = 'pl';\n  return { json: { ...it, voice_id: el.voice_id, output_format: el.output_format || 'mp3_44100_96', total_characters: totalChars, body } };\n});\n"
+      }
+    },
+    {
+      "id": "6671bf9b-f8b5-46fc-abda-ddf8a1d2466a",
+      "position": [
+        1680,
+        90
+      ],
+      "name": "ElevenLabs: TTS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.elevenlabs.io/v1/text-to-speech/{{ $json.voice_id }}?output_format={{ $json.output_format }}",
+        "options": {
+          "timeout": 180000,
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          },
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 300
+            }
+          }
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "audio/mpeg"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ELEVENLABS_CRED",
+          "name": "NEWSFLOW ElevenLabs"
+        }
+      }
+    },
+    {
+      "id": "c4a06e5b-febb-4d56-ab57-9dc588ef5546",
+      "position": [
+        1920,
+        90
+      ],
+      "name": "Assemble audio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// NEWSFLOW — wygenerowane z n8n/src/code/wf05_assemble_audio.js (nie edytuj w n8n — edytuj źródło i przebuduj)\n// ---- lib/tts.cjs ----\n// NEWSFLOW — przygotowanie tekstu do syntezy mowy i obliczenia audio.\n\n// Normalizacja tekstu pod odsłuch po polsku (skróty, symbole, URL-e).\nfunction prepareForSpeech(text) {\n  let s = String(text || '');\n  s = s.replace(/https?:\\/\\/[^\\s,;)]+/g, '').replace(/\\s+([,.;:])/g, '$1'); // linki nie są czytane\n  s = s.replace(/[*_#`>|]/g, '');                     // markdown\n  s = s.replace(/\\s*[–—]\\s*/g, ' – ');\n  s = s.replace(/(\\d)\\s?%/g, '$1 procent');\n  s = s.replace(/\\$\\s?(\\d[\\d.,]*)\\s?(mld|mln|tys\\.)?/g, (m, n, u) => `${n}${u ? ' ' + u : ''} dolarów`);\n  s = s.replace(/€\\s?(\\d[\\d.,]*)/g, '$1 euro');\n  s = s.replace(/\\bnp\\./g, 'na przykład').replace(/\\bm\\.in\\./g, 'między innymi').replace(/\\btzw\\./g, 'tak zwany');\n  s = s.replace(/\\bitd\\./g, 'i tak dalej').replace(/\\bok\\.\\s(?=\\d)/g, 'około ');\n  s = s.replace(/\\bAI\\b/g, 'AI').replace(/\\bvs\\.?\\b/g, 'kontra');\n  s = s.replace(/[ \\t]+/g, ' ').replace(/\\n{3,}/g, '\\n\\n').trim();\n  return s;\n}\n\n// Dzieli tekst na fragmenty <= maxChars, wyłącznie na granicach zdań/akapitów.\nfunction chunkText(text, maxChars) {\n  maxChars = maxChars || 2500;\n  const paragraphs = String(text || '').split(/\\n{2,}/).map((p) => p.trim()).filter(Boolean);\n  const chunks = [];\n  let cur = '';\n  const push = () => { if (cur.trim()) chunks.push(cur.trim()); cur = ''; };\n  for (const p of paragraphs) {\n    if ((cur + '\\n\\n' + p).length <= maxChars) { cur = cur ? cur + '\\n\\n' + p : p; continue; }\n    push();\n    if (p.length <= maxChars) { cur = p; continue; }\n    const sentences = p.match(/[^.!?…]+[.!?…]+[\"”»)]*\\s*|[^.!?…]+$/g) || [p];\n    for (const s of sentences) {\n      if ((cur + s).length > maxChars) push();\n      if (s.length > maxChars) { for (let i = 0; i < s.length; i += maxChars) chunks.push(s.slice(i, i + maxChars).trim()); continue; }\n      cur += s;\n    }\n  }\n  push();\n  return chunks;\n}\n\n// Bitrate z formatu ElevenLabs, np. \"mp3_44100_96\" -> 96\nfunction bitrateFromFormat(fmt) {\n  const m = String(fmt || '').match(/^mp3_\\d+_(\\d+)$/);\n  return m ? parseInt(m[1], 10) : 128;\n}\n\n// Czas trwania MP3 CBR na podstawie rozmiaru\nfunction mp3DurationSeconds(bytes, kbps) {\n  return Math.round((bytes * 8) / (kbps * 1000) * 100) / 100;\n}\n\n// Usuwa nagłówek ID3v2 (przy sklejaniu fragmentów zostawiamy tylko pierwszy)\nfunction stripId3(buf) {\n  if (buf.length > 10 && buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) {\n    const size = ((buf[6] & 0x7f) << 21) | ((buf[7] & 0x7f) << 14) | ((buf[8] & 0x7f) << 7) | (buf[9] & 0x7f);\n    return buf.subarray(10 + size);\n  }\n  return buf;\n}\n\n// Rozdziały z czasami startu\nfunction buildChapters(parts) {\n  let t = 0;\n  return parts.map((p, i) => {\n    const ch = { index: i, title: p.title, start_seconds: Math.round(t * 100) / 100, duration_seconds: p.duration_seconds, audio_asset_id: p.audio_asset_id || null, story_ids: p.story_ids || [] };\n    t += p.duration_seconds;\n    return ch;\n  });\n}\n// ---- /lib/tts.cjs ----\nconst cfg = $('Load config').first().json;\nconst el = cfg.elevenlabs || {};\nconst meta = $('Prepare TTS').all().map((i) => i.json);\nconst outs = $input.all();\nconst kbps = bitrateFromFormat(el.output_format || 'mp3_44100_96');\nconst failed = [];\nconst chapters = {};\nfor (let i = 0; i < meta.length; i++) {\n  const o = outs[i];\n  if (!o || o.json.error || !o.binary || !o.binary.data) { failed.push(`${meta[i].chapter_index}.${meta[i].chunk_index}`); continue; }\n  const buf = await this.helpers.getBinaryDataBuffer(i, 'data');\n  const ch = (chapters[meta[i].chapter_index] = chapters[meta[i].chapter_index] || { meta: meta[i], bufs: [], chars: 0 });\n  ch.bufs.push(ch.bufs.length ? stripId3(buf) : buf);\n  ch.chars += meta[i].text.length;\n}\nconst b = meta[0];\nif (failed.length) return [{ json: { failed: true, briefing_id: b.briefing_id, error: `Nie wygenerowano fragmentów: ${failed.join(', ')}` } }];\n\nconst base = `briefings/${b.briefing_date}/${b.briefing_id}`;\nconst usdPer1k = el.usd_per_1k_characters || 0.3;\nconst out = [];\nconst fullParts = [];\nObject.keys(chapters).map(Number).sort((a, c) => a - c).forEach((ci) => {\n  const ch = chapters[ci];\n  const buf = Buffer.concat(ch.bufs);\n  fullParts.push(fullParts.length ? stripId3(buf) : buf);\n  out.push({\n    json: { kind: 'briefing_chapter', briefing_id: b.briefing_id, chapter_index: ci, title: ch.meta.chapter_title,\n      story_ids: ch.meta.story_ids, storage_path: `${base}/chapter-${String(ci + 1).padStart(2, '0')}.mp3`,\n      size_bytes: buf.length, duration_seconds: mp3DurationSeconds(buf.length, kbps), characters: ch.chars,\n      cost_usd: Math.round((ch.chars / 1000) * usdPer1k * 1e6) / 1e6 },\n    binary: { data: { data: buf.toString('base64'), mimeType: 'audio/mpeg', fileName: `chapter-${ci + 1}.mp3`, fileExtension: 'mp3' } },\n  });\n});\nconst full = Buffer.concat(fullParts);\nout.push({\n  json: { kind: 'briefing_full', briefing_id: b.briefing_id, chapter_index: null, title: 'Pełna audycja',\n    story_ids: [], storage_path: `${base}/full.mp3`, size_bytes: full.length,\n    duration_seconds: mp3DurationSeconds(full.length, kbps), characters: 0, cost_usd: 0 },\n  binary: { data: { data: full.toString('base64'), mimeType: 'audio/mpeg', fileName: 'full.mp3', fileExtension: 'mp3' } },\n});\nreturn out;\n"
+      }
+    },
+    {
+      "id": "d90a0fc2-f3fc-4d05-a5ca-abaff6c1a485",
+      "position": [
+        2160,
+        0
+      ],
+      "name": "Upload list",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// NEWSFLOW — wygenerowane z n8n/src/code/wf05_upload_list.js (nie edytuj w n8n — edytuj źródło i przebuduj)\nreturn $input.all().filter((i) => !i.json.failed);\n"
+      }
+    },
+    {
+      "id": "2601d733-8b0f-4c81-ae36-d815200c2633",
+      "position": [
+        2400,
+        0
+      ],
+      "name": "Upload to Storage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "=https://YOUR-PROJECT-REF.supabase.co/storage/v1/object/audio/{{ $json.storage_path }}",
+        "options": {
+          "timeout": 120000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 0
+            }
+          }
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-upsert",
+              "value": "true"
+            },
+            {
+              "name": "Content-Type",
+              "value": "audio/mpeg"
+            },
+            {
+              "name": "Cache-Control",
+              "value": "max-age=31536000"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data"
+      },
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "ecf09af3-4066-4f00-ae70-a9f57504edeb",
+      "position": [
+        2640,
+        0
+      ],
+      "name": "Asset rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// NEWSFLOW — wygenerowane z n8n/src/code/wf05_asset_rows.js (nie edytuj w n8n — edytuj źródło i przebuduj)\nconst cfg = $('Load config').first().json;\nconst el = cfg.elevenlabs || {};\nconst files = $('Upload list').all().map((i) => i.json);\nconst resps = $input.all().map((i) => i.json);\nconst errors = resps.map((r, i) => (r && r.error ? `${files[i].storage_path}: ${r.error.message || JSON.stringify(r.error)}` : null)).filter(Boolean);\nif (errors.length) throw new Error('Upload do Supabase Storage nie powiódł się: ' + errors.join('; '));\nconst rows = files.map((f) => ({\n  kind: f.kind, briefing_id: f.briefing_id, chapter_index: f.chapter_index, title: f.title, storage_path: f.storage_path,\n  duration_seconds: f.duration_seconds, size_bytes: f.size_bytes, voice_id: el.voice_id, model_id: el.model_id,\n  language: 'pl', characters: f.characters, cost_usd: f.cost_usd, ai_generated: true, status: 'ready', error: null,\n  metadata: { story_ids: f.story_ids, output_format: el.output_format },\n}));\nreturn [{ json: { rows } }];\n"
+      }
+    },
+    {
+      "id": "620bdb98-8cc4-436b-af27-77fd3ca0eed3",
+      "position": [
+        2880,
+        0
+      ],
+      "name": "Save audio assets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/audio_assets?on_conflict=storage_path",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.rows) }}"
+      },
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "d47fdbf9-2f28-428c-a410-34b4fb184f78",
+      "position": [
+        3120,
+        0
+      ],
+      "name": "Finalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// NEWSFLOW — wygenerowane z n8n/src/code/wf05_finalize.js (nie edytuj w n8n — edytuj źródło i przebuduj)\n// ---- lib/tts.cjs ----\n// NEWSFLOW — przygotowanie tekstu do syntezy mowy i obliczenia audio.\n\n// Normalizacja tekstu pod odsłuch po polsku (skróty, symbole, URL-e).\nfunction prepareForSpeech(text) {\n  let s = String(text || '');\n  s = s.replace(/https?:\\/\\/[^\\s,;)]+/g, '').replace(/\\s+([,.;:])/g, '$1'); // linki nie są czytane\n  s = s.replace(/[*_#`>|]/g, '');                     // markdown\n  s = s.replace(/\\s*[–—]\\s*/g, ' – ');\n  s = s.replace(/(\\d)\\s?%/g, '$1 procent');\n  s = s.replace(/\\$\\s?(\\d[\\d.,]*)\\s?(mld|mln|tys\\.)?/g, (m, n, u) => `${n}${u ? ' ' + u : ''} dolarów`);\n  s = s.replace(/€\\s?(\\d[\\d.,]*)/g, '$1 euro');\n  s = s.replace(/\\bnp\\./g, 'na przykład').replace(/\\bm\\.in\\./g, 'między innymi').replace(/\\btzw\\./g, 'tak zwany');\n  s = s.replace(/\\bitd\\./g, 'i tak dalej').replace(/\\bok\\.\\s(?=\\d)/g, 'około ');\n  s = s.replace(/\\bAI\\b/g, 'AI').replace(/\\bvs\\.?\\b/g, 'kontra');\n  s = s.replace(/[ \\t]+/g, ' ').replace(/\\n{3,}/g, '\\n\\n').trim();\n  return s;\n}\n\n// Dzieli tekst na fragmenty <= maxChars, wyłącznie na granicach zdań/akapitów.\nfunction chunkText(text, maxChars) {\n  maxChars = maxChars || 2500;\n  const paragraphs = String(text || '').split(/\\n{2,}/).map((p) => p.trim()).filter(Boolean);\n  const chunks = [];\n  let cur = '';\n  const push = () => { if (cur.trim()) chunks.push(cur.trim()); cur = ''; };\n  for (const p of paragraphs) {\n    if ((cur + '\\n\\n' + p).length <= maxChars) { cur = cur ? cur + '\\n\\n' + p : p; continue; }\n    push();\n    if (p.length <= maxChars) { cur = p; continue; }\n    const sentences = p.match(/[^.!?…]+[.!?…]+[\"”»)]*\\s*|[^.!?…]+$/g) || [p];\n    for (const s of sentences) {\n      if ((cur + s).length > maxChars) push();\n      if (s.length > maxChars) { for (let i = 0; i < s.length; i += maxChars) chunks.push(s.slice(i, i + maxChars).trim()); continue; }\n      cur += s;\n    }\n  }\n  push();\n  return chunks;\n}\n\n// Bitrate z formatu ElevenLabs, np. \"mp3_44100_96\" -> 96\nfunction bitrateFromFormat(fmt) {\n  const m = String(fmt || '').match(/^mp3_\\d+_(\\d+)$/);\n  return m ? parseInt(m[1], 10) : 128;\n}\n\n// Czas trwania MP3 CBR na podstawie rozmiaru\nfunction mp3DurationSeconds(bytes, kbps) {\n  return Math.round((bytes * 8) / (kbps * 1000) * 100) / 100;\n}\n\n// Usuwa nagłówek ID3v2 (przy sklejaniu fragmentów zostawiamy tylko pierwszy)\nfunction stripId3(buf) {\n  if (buf.length > 10 && buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) {\n    const size = ((buf[6] & 0x7f) << 21) | ((buf[7] & 0x7f) << 14) | ((buf[8] & 0x7f) << 7) | (buf[9] & 0x7f);\n    return buf.subarray(10 + size);\n  }\n  return buf;\n}\n\n// Rozdziały z czasami startu\nfunction buildChapters(parts) {\n  let t = 0;\n  return parts.map((p, i) => {\n    const ch = { index: i, title: p.title, start_seconds: Math.round(t * 100) / 100, duration_seconds: p.duration_seconds, audio_asset_id: p.audio_asset_id || null, story_ids: p.story_ids || [] };\n    t += p.duration_seconds;\n    return ch;\n  });\n}\n// ---- /lib/tts.cjs ----\nconst assets = $input.all().map((i) => i.json).filter((a) => a && a.id);\nconst full = assets.find((a) => a.kind === 'briefing_full');\nif (!full) throw new Error('Brak zapisanego pliku pełnej audycji');\nconst chapterAssets = assets.filter((a) => a.kind === 'briefing_chapter').sort((a, b) => a.chapter_index - b.chapter_index);\nconst chapters = buildChapters(chapterAssets.map((a) => ({\n  title: a.title, duration_seconds: Number(a.duration_seconds), audio_asset_id: a.id, story_ids: (a.metadata || {}).story_ids || [],\n})));\nconst characters = chapterAssets.reduce((s, a) => s + (a.characters || 0), 0);\nconst cost = chapterAssets.reduce((s, a) => s + Number(a.cost_usd || 0), 0);\nreturn [{ json: {\n  briefing_id: full.briefing_id,\n  patch: { audio_asset_id: full.id, chapters, status: 'audio_ready', error: null },\n  usage: [{ workflow: 'WF05_audio_generator', provider: 'elevenlabs', operation: 'tts_briefing', model: full.model_id,\n            characters, cost_usd: Math.round(cost * 1e6) / 1e6, briefing_id: full.briefing_id }],\n  run: { workflow: 'WF05_audio_generator', execution_id: String($execution.id), status: 'success',\n         stats: { chapters: chapters.length, duration_seconds: Number(full.duration_seconds), characters, cost_usd: cost } },\n} }];\n"
+      }
+    },
+    {
+      "id": "3cd57ced-05c0-4d51-a460-ac1b0ba18c9e",
+      "position": [
+        3360,
+        0
+      ],
+      "name": "Mark audio ready",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/=daily_briefings?id=eq.{{ $json.briefing_id }}",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.patch) }}"
+      },
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "80a38c35-e5c0-4839-a8ae-b4f154a5fa34",
+      "position": [
+        3600,
+        0
+      ],
+      "name": "Log usage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/api_usage",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($(\"Finalize\").first().json.usage) }}"
+      },
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "b7ac9086-d4ad-4e84-a630-2c79fbf7f70a",
+      "position": [
+        3840,
+        0
+      ],
+      "name": "Log run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/pipeline_runs",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($(\"Finalize\").first().json.run) }}"
+      },
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "8474742c-45d8-4f9e-a392-a306608027f2",
+      "position": [
+        2160,
+        234
+      ],
+      "name": "Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// NEWSFLOW — wygenerowane z n8n/src/code/wf05_failure.js (nie edytuj w n8n — edytuj źródło i przebuduj)\nreturn $input.all().filter((i) => i.json.failed).map((i) => ({ json: i.json }));\n"
+      }
+    },
+    {
+      "id": "0ab11c6e-db0e-4ce7-ae12-a72da7ea9157",
+      "position": [
+        2400,
+        234
+      ],
+      "name": "Mark audio failed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/=daily_briefings?id=eq.{{ $json.briefing_id }}",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: \"audio_failed\", error: $json.error }) }}"
+      },
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "f38adf72-cca8-4913-a6fc-7bfa91081302",
+      "position": [
+        2640,
+        234
+      ],
+      "name": "Log failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/pipeline_runs",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: \"WF05_audio_generator\", execution_id: String($execution.id), status: \"error\", error: $(\"Failure\").first().json.error }) }}"
+      },
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "8a1df6a1-1f37-441e-a408-f5dc13a334fb",
+      "name": "Opis",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -260
+      ],
+      "parameters": {
+        "content": "## WF05 – Audio Generator\nCodziennie 07:25: bierze dzisiejszy briefing ze statusem `script_ready`/`audio_failed`, sprawdza budżet ElevenLabs, normalizuje tekst pod odsłuch, dzieli na fragmenty ≤2500 znaków (na granicach zdań), generuje głos (eleven_multilingual_v2), skleja MP3 per rozdział + pełną audycję, wysyła do prywatnego bucketu `audio` i zapisuje `audio_assets` oraz rozdziały z czasami.\nBłąd ⇒ status `audio_failed` — WF06 wyśle wtedy wersję tekstową.",
+        "width": 720,
+        "height": 220
+      }
+    }
+  ],
+  "connections": {
+    "Daily 07:25": {
+      "main": [
+        [
+          {
+            "node": "Load config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run manually": {
+      "main": [
+        [
+          {
+            "node": "Load config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load config": {
+      "main": [
+        [
+          {
+            "node": "Check budget",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check budget": {
+      "main": [
+        [
+          {
+            "node": "Budget gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Budget gate": {
+      "main": [
+        [
+          {
+            "node": "Get briefing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get briefing": {
+      "main": [
+        [
+          {
+            "node": "Mark generating",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark generating": {
+      "main": [
+        [
+          {
+            "node": "Prepare TTS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare TTS": {
+      "main": [
+        [
+          {
+            "node": "ElevenLabs: TTS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ElevenLabs: TTS": {
+      "main": [
+        [
+          {
+            "node": "Assemble audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble audio": {
+      "main": [
+        [
+          {
+            "node": "Upload list",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload list": {
+      "main": [
+        [
+          {
+            "node": "Upload to Storage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to Storage": {
+      "main": [
+        [
+          {
+            "node": "Asset rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Asset rows": {
+      "main": [
+        [
+          {
+            "node": "Save audio assets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save audio assets": {
+      "main": [
+        [
+          {
+            "node": "Finalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize": {
+      "main": [
+        [
+          {
+            "node": "Mark audio ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark audio ready": {
+      "main": [
+        [
+          {
+            "node": "Log usage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log usage": {
+      "main": [
+        [
+          {
+            "node": "Log run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Failure": {
+      "main": [
+        [
+          {
+            "node": "Mark audio failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark audio failed": {
+      "main": [
+        [
+          {
+            "node": "Log failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Warsaw",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

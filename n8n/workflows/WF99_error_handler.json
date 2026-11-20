@@ -1,0 +1,120 @@
+{
+  "name": "NEWSFLOW WF99 – Error Handler",
+  "nodes": [
+    {
+      "id": "083666d4-d1a1-4735-abaa-e2ec08c13445",
+      "position": [
+        0,
+        0
+      ],
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "parameters": {}
+    },
+    {
+      "id": "361b91b0-3634-4b52-ac64-844617da63a1",
+      "position": [
+        240,
+        0
+      ],
+      "name": "Build error row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// NEWSFLOW — wygenerowane z n8n/src/code/wf99_error_row.js (nie edytuj w n8n — edytuj źródło i przebuduj)\nconst e = $input.first().json;\nconst ex = e.execution || {};\nreturn [{ json: {\n  workflow: (e.workflow && e.workflow.name) || 'unknown',\n  execution_id: ex.id ? String(ex.id) : null,\n  status: 'error',\n  error: String((ex.error && (ex.error.message || ex.error.description)) || 'Nieznany błąd').slice(0, 4000),\n  stats: { last_node: ex.lastNodeExecuted || null, url: ex.url || null, mode: ex.mode || null },\n} }];\n"
+      }
+    },
+    {
+      "id": "b25bed5e-44b6-4cb5-a340-8803d68022a1",
+      "position": [
+        480,
+        0
+      ],
+      "name": "Log run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/pipeline_runs",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}"
+      },
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "f5f5feb6-78a5-4c8c-ac8c-6d7f6409ff4f",
+      "name": "Opis",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -260
+      ],
+      "parameters": {
+        "content": "## WF99 – Error Handler\nUstaw ten workflow jako **Error workflow** w ustawieniach WF01–WF06. Każdy nieobsłużony błąd trafia do `pipeline_runs` (status `error`) — widać go w aplikacji (Ustawienia → Stan systemu).",
+        "width": 720,
+        "height": 220
+      }
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build error row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build error row": {
+      "main": [
+        [
+          {
+            "node": "Log run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Warsaw",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

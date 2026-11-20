@@ -1,0 +1,531 @@
+{
+  "name": "NEWSFLOW WF02 – Content Extractor",
+  "nodes": [
+    {
+      "id": "3c5a8db8-6f4d-461c-adef-5dee98fc6257",
+      "position": [
+        0,
+        0
+      ],
+      "name": "Every 2 hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "20 */2 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a0d402d3-3570-4242-a72f-bdcaf3d684e2",
+      "position": [
+        0,
+        180
+      ],
+      "name": "Run manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "parameters": {}
+    },
+    {
+      "id": "79016548-22bf-48bf-acd4-5fb751f10e77",
+      "position": [
+        240,
+        90
+      ],
+      "name": "Load config",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/rpc/get_config",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}"
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "137a4800-af9f-48df-af3e-0ba3527c5462",
+      "position": [
+        480,
+        90
+      ],
+      "name": "Claim items",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/rpc/claim_items_for_extraction",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_limit: ($json.pipeline || {}).extract_batch || 20 }) }}"
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "0e172929-f0f2-4461-a020-7853e34b07e5",
+      "position": [
+        720,
+        90
+      ],
+      "name": "Route items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// NEWSFLOW — wygenerowane z n8n/src/code/wf02_route_items.js (nie edytuj w n8n — edytuj źródło i przebuduj)\n// ---- lib/text.cjs ----\n// NEWSFLOW — narzędzia tekstowe (bez zależności; działa w węźle Code n8n i w Node.js)\n\nconst ENTITIES = {\n  amp: '&', lt: '<', gt: '>', quot: '\"', apos: \"'\", nbsp: ' ', ndash: '–', mdash: '—',\n  hellip: '…', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“', laquo: '«', raquo: '»',\n  copy: '©', reg: '®', trade: '™', bull: '•', middot: '·', euro: '€', shy: '',\n};\n\nfunction decodeEntities(s) {\n  if (!s) return '';\n  return String(s).replace(/&(#x[0-9a-f]+|#\\d+|[a-z]+);/gi, (m, e) => {\n    if (e[0] === '#') {\n      const code = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);\n      return Number.isFinite(code) && code > 0 && code < 0x110000 ? String.fromCodePoint(code) : m;\n    }\n    const v = ENTITIES[e.toLowerCase()];\n    return v === undefined ? m : v;\n  });\n}\n\nfunction stripCdata(s) {\n  return String(s || '').replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g, '$1');\n}\n\nconst BLOCK_TAGS = /<\\/?(p|div|br|li|ul|ol|h[1-6]|tr|table|section|article|blockquote|pre|header|footer|figure|figcaption|hr)\\b[^>]*>/gi;\n\nfunction htmlToText(html) {\n  if (!html) return '';\n  let s = stripCdata(String(html));\n  s = s.replace(/<!--[\\s\\S]*?-->/g, ' ');\n  s = s.replace(/<(script|style|noscript|svg|iframe|template|form|button|select)\\b[\\s\\S]*?<\\/\\1>/gi, ' ');\n  s = s.replace(BLOCK_TAGS, '\\n');\n  s = s.replace(/<[^>]+>/g, ' ');\n  s = decodeEntities(s);\n  s = s.replace(/[ \\t\\f\\v ]+/g, ' ');\n  s = s.replace(/ *\\n */g, '\\n').replace(/\\n{3,}/g, '\\n\\n');\n  return s.trim();\n}\n\nfunction wordCount(s) {\n  if (!s) return 0;\n  const m = String(s).match(/[\\p{L}\\p{N}][\\p{L}\\p{N}'’-]*/gu);\n  return m ? m.length : 0;\n}\n\nfunction truncate(s, maxChars) {\n  s = String(s || '');\n  if (s.length <= maxChars) return s;\n  const cut = s.slice(0, maxChars);\n  const lastBreak = Math.max(cut.lastIndexOf('\\n'), cut.lastIndexOf('. '));\n  return (lastBreak > maxChars * 0.8 ? cut.slice(0, lastBreak + 1) : cut) + '\\n[…treść skrócona…]';\n}\n\n// Ekstrakcja głównej treści artykułu (uproszczony \"readability\").\nfunction extractArticle(html) {\n  html = String(html || '');\n  const meta = (name) => {\n    const re = new RegExp(`<meta[^>]+(?:property|name)=[\"']${name}[\"'][^>]*>`, 'i');\n    const tag = html.match(re);\n    if (!tag) return null;\n    const c = tag[0].match(/content=[\"']([^\"']*)[\"']/i);\n    return c ? decodeEntities(c[1]).trim() : null;\n  };\n  const titleTag = html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i);\n  const title = meta('og:title') || (titleTag ? htmlToText(titleTag[1]) : null);\n  const description = meta('og:description') || meta('description');\n  const published = meta('article:published_time') || meta('og:published_time');\n  const langMatch = html.match(/<html[^>]*\\blang=[\"']([a-zA-Z-]+)[\"']/i);\n\n  let body = html.replace(/<(script|style|noscript|svg|nav|aside|footer|header|form|iframe)\\b[\\s\\S]*?<\\/\\1>/gi, ' ');\n  let candidate = null;\n  const article = body.match(/<article\\b[\\s\\S]*?<\\/article>/gi);\n  if (article && article.length) {\n    candidate = article.sort((a, b) => b.length - a.length)[0];\n  } else {\n    const main = body.match(/<main\\b[\\s\\S]*?<\\/main>/i);\n    if (main) candidate = main[0];\n  }\n  let text = candidate ? htmlToText(candidate) : '';\n\n  // Fallback: zbierz akapity <p> z całej strony\n  if (wordCount(text) < 150) {\n    const paras = (body.match(/<p\\b[^>]*>[\\s\\S]*?<\\/p>/gi) || [])\n      .map(htmlToText)\n      .filter((p) => wordCount(p) >= 8);\n    const ptext = paras.join('\\n\\n');\n    if (wordCount(ptext) > wordCount(text)) text = ptext;\n  }\n  return {\n    title: title || null,\n    description: description || null,\n    published_at: published || null,\n    language: langMatch ? langMatch[1].slice(0, 2).toLowerCase() : null,\n    text,\n    word_count: wordCount(text),\n  };\n}\n\n// Napisy WebVTT/SRT -> czysty tekst\nfunction subtitlesToText(s) {\n  return String(s || '')\n    .replace(/^WEBVTT.*$/m, '')\n    .replace(/^\\d+\\s*$/gm, '')\n    .replace(/^\\s*\\d{1,2}:\\d{2}(:\\d{2})?[.,]\\d{3}\\s*-->.*$/gm, '')\n    .replace(/<[^>]+>/g, '')\n    .replace(/\\n{2,}/g, '\\n')\n    .split('\\n').map((l) => l.trim()).filter(Boolean)\n    .filter((l, i, arr) => l !== arr[i - 1])\n    .join(' ')\n    .trim();\n}\n\nconst TRACKING_PARAMS = /^(utm_[a-z]+|fbclid|gclid|mc_cid|mc_eid|ref|ref_src|source|cmpid|igshid|si|_hsenc|_hsmi|mkt_tok)$/i;\n\nfunction canonicalUrl(raw) {\n  try {\n    const u = new URL(String(raw).trim());\n    u.hash = '';\n    u.hostname = u.hostname.toLowerCase().replace(/^www\\./, '');\n    const keep = [];\n    u.searchParams.forEach((v, k) => { if (!TRACKING_PARAMS.test(k)) keep.push([k, v]); });\n    keep.sort((a, b) => a[0].localeCompare(b[0]));\n    u.search = keep.length ? '?' + keep.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&') : '';\n    if (u.hostname === 'youtube.com' || u.hostname === 'm.youtube.com') {\n      const v = new URL(String(raw)).searchParams.get('v');\n      if (v) return `https://youtube.com/watch?v=${v}`;\n    }\n    if (u.hostname === 'youtu.be') return `https://youtube.com/watch?v=${u.pathname.slice(1)}`;\n    if (u.pathname.length > 1 && u.pathname.endsWith('/')) u.pathname = u.pathname.replace(/\\/+$/, '');\n    return u.toString().replace(/^http:\\/\\//, 'https://');\n  } catch (e) {\n    return String(raw || '').trim();\n  }\n}\n\n// SHA-256 (czysty JS) — n8n Cloud nie zawsze udostępnia moduł crypto\nfunction sha256(ascii) {\n  const utf8 = unescape(encodeURIComponent(String(ascii)));\n  const K = [];\n  const H = [];\n  let primeCounter = 0;\n  const isComposite = {};\n  for (let candidate = 2; primeCounter < 64; candidate++) {\n    if (!isComposite[candidate]) {\n      for (let i = candidate * candidate; i < 313; i += candidate) isComposite[i] = candidate;\n      if (primeCounter < 8) H[primeCounter] = (Math.pow(candidate, 0.5) * 0x100000000) | 0;\n      K[primeCounter++] = (Math.pow(candidate, 1 / 3) * 0x100000000) | 0;\n    }\n  }\n  const words = [];\n  const bitLen = utf8.length * 8;\n  let s = utf8 + '\\x80';\n  while ((s.length % 64) - 56) s += '\\x00';\n  for (let i = 0; i < s.length; i++) words[i >> 2] |= s.charCodeAt(i) << (((3 - i) % 4) * 8);\n  words[words.length] = (bitLen / 0x100000000) | 0;\n  words[words.length] = bitLen | 0;\n  const rr = (v, n) => (v >>> n) | (v << (32 - n));\n  let hash = H.slice(0, 8);\n  for (let j = 0; j < words.length;) {\n    const w = words.slice(j, (j += 16));\n    const old = hash;\n    hash = hash.slice(0, 8);\n    for (let i = 0; i < 64; i++) {\n      const w15 = w[i - 15], w2 = w[i - 2];\n      const a = hash[0], e = hash[4];\n      const t1 = hash[7] + (rr(e, 6) ^ rr(e, 11) ^ rr(e, 25)) + ((e & hash[5]) ^ (~e & hash[6])) + K[i] +\n        (w[i] = i < 16 ? w[i] : (w[i - 16] + (rr(w15, 7) ^ rr(w15, 18) ^ (w15 >>> 3)) + w[i - 7] +\n          (rr(w2, 17) ^ rr(w2, 19) ^ (w2 >>> 10))) | 0);\n      const t2 = (rr(a, 2) ^ rr(a, 13) ^ rr(a, 22)) + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));\n      hash = [(t1 + t2) | 0].concat(hash);\n      hash[4] = (hash[4] + t1) | 0;\n    }\n    for (let i = 0; i < 8; i++) hash[i] = (hash[i] + old[i]) | 0;\n  }\n  let out = '';\n  for (let i = 0; i < 8; i++) for (let j = 3; j + 1; j--) {\n    const b = (hash[i] >> (j * 8)) & 255;\n    out += (b < 16 ? '0' : '') + b.toString(16);\n  }\n  return out;\n}\n// ---- /lib/text.cjs ----\n// Decyduje, jak pozyskać treść: 'done' (treść już jest), 'fetch' (strona/napisy), 'transcript' (YouTube).\nconst P = $('Load config').first().json.pipeline || {};\nconst minC = P.min_words_complete || 250;\nconst minP = P.min_words_partial || 80;\nconst items = $input.all().map((i) => i.json).filter((x) => x && x.id);\nconst out = [];\nfor (const it of items) {\n  const meta = it.metadata || {};\n  const feedWords = wordCount(it.original_content);\n  const descWords = wordCount(it.description);\n  const base = { id: it.id, source_type: it.source_type, original_url: it.original_url, attempts: it.extraction_attempts,\n    feed_content: it.original_content || '', description: it.description || '' };\n\n  if (it.source_type === 'gmail') {\n    out.push({ ...base, action: 'done', result: { id: it.id, status: 'extracted', word_count: feedWords } });\n  } else if (it.source_type === 'youtube') {\n    out.push({ ...base, action: 'transcript' });\n  } else if (it.source_type === 'podcast') {\n    if (meta.transcript_url) out.push({ ...base, action: 'fetch', fetch_url: meta.transcript_url, mode: 'subtitles' });\n    else if (descWords >= minP) out.push({ ...base, action: 'done', result: { id: it.id, status: 'extracted', original_content: it.description, word_count: descWords, metadata: { content_basis: 'show_notes', partial: true } } });\n    else out.push({ ...base, action: 'done', result: { id: it.id, status: 'incomplete', error: 'Brak transkrypcji i za krótki opis odcinka' } });\n  } else if (feedWords >= minC) {\n    out.push({ ...base, action: 'done', result: { id: it.id, status: 'extracted', word_count: feedWords, metadata: { content_basis: 'feed' } } });\n  } else if (it.source_type === 'reddit') {\n    if (feedWords >= minP) out.push({ ...base, action: 'done', result: { id: it.id, status: 'extracted', word_count: feedWords, metadata: { content_basis: 'feed', partial: true } } });\n    else out.push({ ...base, action: 'done', result: { id: it.id, status: 'incomplete', error: 'Post bez treści (link/obraz)' } });\n  } else {\n    out.push({ ...base, action: 'fetch', fetch_url: it.original_url, mode: 'article' });\n  }\n}\nreturn out.map((j) => ({ json: j }));\n"
+      }
+    },
+    {
+      "id": "04074772-79c2-4b40-a2d5-c44408a58326",
+      "position": [
+        960,
+        -90
+      ],
+      "name": "Done list",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// NEWSFLOW — wygenerowane z n8n/src/code/wf02_done_list.js (nie edytuj w n8n — edytuj źródło i przebuduj)\nconst results = $input.all().map((i) => i.json).filter((j) => j.action === 'done').map((j) => j.result);\nreturn results.length ? [{ json: { p_results: results } }] : [];\n"
+      }
+    },
+    {
+      "id": "2df0e92b-f717-42c1-a209-c09c362171a5",
+      "position": [
+        1200,
+        -90
+      ],
+      "name": "Save ready",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/rpc/apply_extraction_results",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}"
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "f07eceba-b6b6-4448-a627-2d15bf63c970",
+      "position": [
+        960,
+        90
+      ],
+      "name": "Fetch list",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// NEWSFLOW — wygenerowane z n8n/src/code/wf02_fetch_list.js (nie edytuj w n8n — edytuj źródło i przebuduj)\nreturn $input.all().filter((i) => i.json.action === 'fetch');\n"
+      }
+    },
+    {
+      "id": "50fbddb8-dab2-4921-a84a-c7d4c0e79063",
+      "position": [
+        1200,
+        90
+      ],
+      "name": "Fetch page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.fetch_url }}",
+        "options": {
+          "timeout": 25000,
+          "response": {
+            "response": {
+              "responseFormat": "text",
+              "outputPropertyName": "body"
+            }
+          },
+          "batching": {
+            "batch": {
+              "batchSize": 4,
+              "batchInterval": 1000
+            }
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15 NEWSFLOW-Personal/0.1"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,text/plain,text/vtt,*/*"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en,pl;q=0.8"
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "fa66cf86-249b-46d1-ab19-722fbbab5ff7",
+      "position": [
+        1440,
+        90
+      ],
+      "name": "Extract pages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// NEWSFLOW — wygenerowane z n8n/src/code/wf02_extract_pages.js (nie edytuj w n8n — edytuj źródło i przebuduj)\n// ---- lib/text.cjs ----\n// NEWSFLOW — narzędzia tekstowe (bez zależności; działa w węźle Code n8n i w Node.js)\n\nconst ENTITIES = {\n  amp: '&', lt: '<', gt: '>', quot: '\"', apos: \"'\", nbsp: ' ', ndash: '–', mdash: '—',\n  hellip: '…', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“', laquo: '«', raquo: '»',\n  copy: '©', reg: '®', trade: '™', bull: '•', middot: '·', euro: '€', shy: '',\n};\n\nfunction decodeEntities(s) {\n  if (!s) return '';\n  return String(s).replace(/&(#x[0-9a-f]+|#\\d+|[a-z]+);/gi, (m, e) => {\n    if (e[0] === '#') {\n      const code = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);\n      return Number.isFinite(code) && code > 0 && code < 0x110000 ? String.fromCodePoint(code) : m;\n    }\n    const v = ENTITIES[e.toLowerCase()];\n    return v === undefined ? m : v;\n  });\n}\n\nfunction stripCdata(s) {\n  return String(s || '').replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g, '$1');\n}\n\nconst BLOCK_TAGS = /<\\/?(p|div|br|li|ul|ol|h[1-6]|tr|table|section|article|blockquote|pre|header|footer|figure|figcaption|hr)\\b[^>]*>/gi;\n\nfunction htmlToText(html) {\n  if (!html) return '';\n  let s = stripCdata(String(html));\n  s = s.replace(/<!--[\\s\\S]*?-->/g, ' ');\n  s = s.replace(/<(script|style|noscript|svg|iframe|template|form|button|select)\\b[\\s\\S]*?<\\/\\1>/gi, ' ');\n  s = s.replace(BLOCK_TAGS, '\\n');\n  s = s.replace(/<[^>]+>/g, ' ');\n  s = decodeEntities(s);\n  s = s.replace(/[ \\t\\f\\v ]+/g, ' ');\n  s = s.replace(/ *\\n */g, '\\n').replace(/\\n{3,}/g, '\\n\\n');\n  return s.trim();\n}\n\nfunction wordCount(s) {\n  if (!s) return 0;\n  const m = String(s).match(/[\\p{L}\\p{N}][\\p{L}\\p{N}'’-]*/gu);\n  return m ? m.length : 0;\n}\n\nfunction truncate(s, maxChars) {\n  s = String(s || '');\n  if (s.length <= maxChars) return s;\n  const cut = s.slice(0, maxChars);\n  const lastBreak = Math.max(cut.lastIndexOf('\\n'), cut.lastIndexOf('. '));\n  return (lastBreak > maxChars * 0.8 ? cut.slice(0, lastBreak + 1) : cut) + '\\n[…treść skrócona…]';\n}\n\n// Ekstrakcja głównej treści artykułu (uproszczony \"readability\").\nfunction extractArticle(html) {\n  html = String(html || '');\n  const meta = (name) => {\n    const re = new RegExp(`<meta[^>]+(?:property|name)=[\"']${name}[\"'][^>]*>`, 'i');\n    const tag = html.match(re);\n    if (!tag) return null;\n    const c = tag[0].match(/content=[\"']([^\"']*)[\"']/i);\n    return c ? decodeEntities(c[1]).trim() : null;\n  };\n  const titleTag = html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i);\n  const title = meta('og:title') || (titleTag ? htmlToText(titleTag[1]) : null);\n  const description = meta('og:description') || meta('description');\n  const published = meta('article:published_time') || meta('og:published_time');\n  const langMatch = html.match(/<html[^>]*\\blang=[\"']([a-zA-Z-]+)[\"']/i);\n\n  let body = html.replace(/<(script|style|noscript|svg|nav|aside|footer|header|form|iframe)\\b[\\s\\S]*?<\\/\\1>/gi, ' ');\n  let candidate = null;\n  const article = body.match(/<article\\b[\\s\\S]*?<\\/article>/gi);\n  if (article && article.length) {\n    candidate = article.sort((a, b) => b.length - a.length)[0];\n  } else {\n    const main = body.match(/<main\\b[\\s\\S]*?<\\/main>/i);\n    if (main) candidate = main[0];\n  }\n  let text = candidate ? htmlToText(candidate) : '';\n\n  // Fallback: zbierz akapity <p> z całej strony\n  if (wordCount(text) < 150) {\n    const paras = (body.match(/<p\\b[^>]*>[\\s\\S]*?<\\/p>/gi) || [])\n      .map(htmlToText)\n      .filter((p) => wordCount(p) >= 8);\n    const ptext = paras.join('\\n\\n');\n    if (wordCount(ptext) > wordCount(text)) text = ptext;\n  }\n  return {\n    title: title || null,\n    description: description || null,\n    published_at: published || null,\n    language: langMatch ? langMatch[1].slice(0, 2).toLowerCase() : null,\n    text,\n    word_count: wordCount(text),\n  };\n}\n\n// Napisy WebVTT/SRT -> czysty tekst\nfunction subtitlesToText(s) {\n  return String(s || '')\n    .replace(/^WEBVTT.*$/m, '')\n    .replace(/^\\d+\\s*$/gm, '')\n    .replace(/^\\s*\\d{1,2}:\\d{2}(:\\d{2})?[.,]\\d{3}\\s*-->.*$/gm, '')\n    .replace(/<[^>]+>/g, '')\n    .replace(/\\n{2,}/g, '\\n')\n    .split('\\n').map((l) => l.trim()).filter(Boolean)\n    .filter((l, i, arr) => l !== arr[i - 1])\n    .join(' ')\n    .trim();\n}\n\nconst TRACKING_PARAMS = /^(utm_[a-z]+|fbclid|gclid|mc_cid|mc_eid|ref|ref_src|source|cmpid|igshid|si|_hsenc|_hsmi|mkt_tok)$/i;\n\nfunction canonicalUrl(raw) {\n  try {\n    const u = new URL(String(raw).trim());\n    u.hash = '';\n    u.hostname = u.hostname.toLowerCase().replace(/^www\\./, '');\n    const keep = [];\n    u.searchParams.forEach((v, k) => { if (!TRACKING_PARAMS.test(k)) keep.push([k, v]); });\n    keep.sort((a, b) => a[0].localeCompare(b[0]));\n    u.search = keep.length ? '?' + keep.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&') : '';\n    if (u.hostname === 'youtube.com' || u.hostname === 'm.youtube.com') {\n      const v = new URL(String(raw)).searchParams.get('v');\n      if (v) return `https://youtube.com/watch?v=${v}`;\n    }\n    if (u.hostname === 'youtu.be') return `https://youtube.com/watch?v=${u.pathname.slice(1)}`;\n    if (u.pathname.length > 1 && u.pathname.endsWith('/')) u.pathname = u.pathname.replace(/\\/+$/, '');\n    return u.toString().replace(/^http:\\/\\//, 'https://');\n  } catch (e) {\n    return String(raw || '').trim();\n  }\n}\n\n// SHA-256 (czysty JS) — n8n Cloud nie zawsze udostępnia moduł crypto\nfunction sha256(ascii) {\n  const utf8 = unescape(encodeURIComponent(String(ascii)));\n  const K = [];\n  const H = [];\n  let primeCounter = 0;\n  const isComposite = {};\n  for (let candidate = 2; primeCounter < 64; candidate++) {\n    if (!isComposite[candidate]) {\n      for (let i = candidate * candidate; i < 313; i += candidate) isComposite[i] = candidate;\n      if (primeCounter < 8) H[primeCounter] = (Math.pow(candidate, 0.5) * 0x100000000) | 0;\n      K[primeCounter++] = (Math.pow(candidate, 1 / 3) * 0x100000000) | 0;\n    }\n  }\n  const words = [];\n  const bitLen = utf8.length * 8;\n  let s = utf8 + '\\x80';\n  while ((s.length % 64) - 56) s += '\\x00';\n  for (let i = 0; i < s.length; i++) words[i >> 2] |= s.charCodeAt(i) << (((3 - i) % 4) * 8);\n  words[words.length] = (bitLen / 0x100000000) | 0;\n  words[words.length] = bitLen | 0;\n  const rr = (v, n) => (v >>> n) | (v << (32 - n));\n  let hash = H.slice(0, 8);\n  for (let j = 0; j < words.length;) {\n    const w = words.slice(j, (j += 16));\n    const old = hash;\n    hash = hash.slice(0, 8);\n    for (let i = 0; i < 64; i++) {\n      const w15 = w[i - 15], w2 = w[i - 2];\n      const a = hash[0], e = hash[4];\n      const t1 = hash[7] + (rr(e, 6) ^ rr(e, 11) ^ rr(e, 25)) + ((e & hash[5]) ^ (~e & hash[6])) + K[i] +\n        (w[i] = i < 16 ? w[i] : (w[i - 16] + (rr(w15, 7) ^ rr(w15, 18) ^ (w15 >>> 3)) + w[i - 7] +\n          (rr(w2, 17) ^ rr(w2, 19) ^ (w2 >>> 10))) | 0);\n      const t2 = (rr(a, 2) ^ rr(a, 13) ^ rr(a, 22)) + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));\n      hash = [(t1 + t2) | 0].concat(hash);\n      hash[4] = (hash[4] + t1) | 0;\n    }\n    for (let i = 0; i < 8; i++) hash[i] = (hash[i] + old[i]) | 0;\n  }\n  let out = '';\n  for (let i = 0; i < 8; i++) for (let j = 3; j + 1; j--) {\n    const b = (hash[i] >> (j * 8)) & 255;\n    out += (b < 16 ? '0' : '') + b.toString(16);\n  }\n  return out;\n}\n// ---- /lib/text.cjs ----\nconst P = $('Load config').first().json.pipeline || {};\nconst minC = P.min_words_complete || 250;\nconst minP = P.min_words_partial || 80;\nconst reqs = $('Fetch list').all().map((i) => i.json);\nconst resps = $input.all();\nconst results = reqs.map((rq, idx) => {\n  const r = resps[idx] ? resps[idx].json : null;\n  const body = r && (typeof r.body === 'string' ? r.body : r.data);\n  const feedWords = wordCount(rq.feed_content);\n  if (!r || r.error || typeof body !== 'string') {\n    const err = r && r.error ? (r.error.message || JSON.stringify(r.error)) : 'Pusta odpowiedź';\n    if (feedWords >= minP) return { id: rq.id, status: 'extracted', word_count: feedWords, metadata: { content_basis: 'feed', partial: true, fetch_error: String(err).slice(0, 300) } };\n    return { id: rq.id, status: rq.attempts >= 3 ? 'incomplete' : 'failed', error: String(err).slice(0, 1000) };\n  }\n  let text, extra = {};\n  if (rq.mode === 'subtitles') {\n    text = /<html|<p\\b/i.test(body) ? htmlToText(body) : subtitlesToText(body);\n    extra = { content_basis: 'podcast_transcript' };\n    const words = wordCount(text);\n    if (words < minP) return { id: rq.id, status: 'incomplete', error: 'Transkrypcja pusta' };\n    return { id: rq.id, status: 'extracted', transcript: truncate(text, 80000), word_count: words, metadata: extra };\n  }\n  const art = extractArticle(body);\n  text = art.text;\n  extra = { content_basis: 'page', page_title: art.title, page_published_at: art.published_at };\n  if (wordCount(rq.feed_content) > art.word_count) { text = rq.feed_content; extra.content_basis = 'feed'; }\n  const words = wordCount(text);\n  if (words >= minC) return { id: rq.id, status: 'extracted', original_content: truncate(text, 60000), word_count: words, language: art.language, metadata: extra };\n  if (words >= minP) return { id: rq.id, status: 'extracted', original_content: truncate(text, 60000), word_count: words, language: art.language, metadata: { ...extra, partial: true } };\n  return { id: rq.id, status: 'incomplete', word_count: words, error: 'Nie udało się wyodrębnić treści (paywall/JS?)' };\n});\nreturn [{ json: { p_results: results } }];\n"
+      }
+    },
+    {
+      "id": "42a7d47e-e430-46a3-aaf6-3ec8bb16816d",
+      "position": [
+        1680,
+        90
+      ],
+      "name": "Save extracted",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/rpc/apply_extraction_results",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}"
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "34aa58bd-2c91-4892-ab17-46ec26df8f4a",
+      "position": [
+        960,
+        270
+      ],
+      "name": "Transcript list",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// NEWSFLOW — wygenerowane z n8n/src/code/wf02_transcript_list.js (nie edytuj w n8n — edytuj źródło i przebuduj)\nreturn $input.all().filter((i) => i.json.action === 'transcript');\n"
+      }
+    },
+    {
+      "id": "3adc7c5d-9bc4-4d1a-afd8-3e7b553fc46b",
+      "position": [
+        1200,
+        270
+      ],
+      "name": "Transcript API (optional)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.supadata.ai/v1/youtube/transcript",
+        "options": {
+          "timeout": 60000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1000
+            }
+          }
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "url",
+              "value": "={{ $json.original_url }}"
+            },
+            {
+              "name": "text",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "disabled": true,
+      "notes": "Opcjonalne, płatne API transkrypcji YouTube (np. Supadata). Włącz po dodaniu credentials „NEWSFLOW Transcript API” (nagłówek x-api-key). Możesz podmienić na innego dostawcę zwracającego {content: \"...\"}",
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_TRANSCRIPT_CRED",
+          "name": "NEWSFLOW Transcript API"
+        }
+      }
+    },
+    {
+      "id": "f289527a-7a44-4f99-a532-225f01f2201d",
+      "position": [
+        1440,
+        270
+      ],
+      "name": "Apply transcripts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// NEWSFLOW — wygenerowane z n8n/src/code/wf02_apply_transcripts.js (nie edytuj w n8n — edytuj źródło i przebuduj)\n// ---- lib/text.cjs ----\n// NEWSFLOW — narzędzia tekstowe (bez zależności; działa w węźle Code n8n i w Node.js)\n\nconst ENTITIES = {\n  amp: '&', lt: '<', gt: '>', quot: '\"', apos: \"'\", nbsp: ' ', ndash: '–', mdash: '—',\n  hellip: '…', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“', laquo: '«', raquo: '»',\n  copy: '©', reg: '®', trade: '™', bull: '•', middot: '·', euro: '€', shy: '',\n};\n\nfunction decodeEntities(s) {\n  if (!s) return '';\n  return String(s).replace(/&(#x[0-9a-f]+|#\\d+|[a-z]+);/gi, (m, e) => {\n    if (e[0] === '#') {\n      const code = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);\n      return Number.isFinite(code) && code > 0 && code < 0x110000 ? String.fromCodePoint(code) : m;\n    }\n    const v = ENTITIES[e.toLowerCase()];\n    return v === undefined ? m : v;\n  });\n}\n\nfunction stripCdata(s) {\n  return String(s || '').replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g, '$1');\n}\n\nconst BLOCK_TAGS = /<\\/?(p|div|br|li|ul|ol|h[1-6]|tr|table|section|article|blockquote|pre|header|footer|figure|figcaption|hr)\\b[^>]*>/gi;\n\nfunction htmlToText(html) {\n  if (!html) return '';\n  let s = stripCdata(String(html));\n  s = s.replace(/<!--[\\s\\S]*?-->/g, ' ');\n  s = s.replace(/<(script|style|noscript|svg|iframe|template|form|button|select)\\b[\\s\\S]*?<\\/\\1>/gi, ' ');\n  s = s.replace(BLOCK_TAGS, '\\n');\n  s = s.replace(/<[^>]+>/g, ' ');\n  s = decodeEntities(s);\n  s = s.replace(/[ \\t\\f\\v ]+/g, ' ');\n  s = s.replace(/ *\\n */g, '\\n').replace(/\\n{3,}/g, '\\n\\n');\n  return s.trim();\n}\n\nfunction wordCount(s) {\n  if (!s) return 0;\n  const m = String(s).match(/[\\p{L}\\p{N}][\\p{L}\\p{N}'’-]*/gu);\n  return m ? m.length : 0;\n}\n\nfunction truncate(s, maxChars) {\n  s = String(s || '');\n  if (s.length <= maxChars) return s;\n  const cut = s.slice(0, maxChars);\n  const lastBreak = Math.max(cut.lastIndexOf('\\n'), cut.lastIndexOf('. '));\n  return (lastBreak > maxChars * 0.8 ? cut.slice(0, lastBreak + 1) : cut) + '\\n[…treść skrócona…]';\n}\n\n// Ekstrakcja głównej treści artykułu (uproszczony \"readability\").\nfunction extractArticle(html) {\n  html = String(html || '');\n  const meta = (name) => {\n    const re = new RegExp(`<meta[^>]+(?:property|name)=[\"']${name}[\"'][^>]*>`, 'i');\n    const tag = html.match(re);\n    if (!tag) return null;\n    const c = tag[0].match(/content=[\"']([^\"']*)[\"']/i);\n    return c ? decodeEntities(c[1]).trim() : null;\n  };\n  const titleTag = html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i);\n  const title = meta('og:title') || (titleTag ? htmlToText(titleTag[1]) : null);\n  const description = meta('og:description') || meta('description');\n  const published = meta('article:published_time') || meta('og:published_time');\n  const langMatch = html.match(/<html[^>]*\\blang=[\"']([a-zA-Z-]+)[\"']/i);\n\n  let body = html.replace(/<(script|style|noscript|svg|nav|aside|footer|header|form|iframe)\\b[\\s\\S]*?<\\/\\1>/gi, ' ');\n  let candidate = null;\n  const article = body.match(/<article\\b[\\s\\S]*?<\\/article>/gi);\n  if (article && article.length) {\n    candidate = article.sort((a, b) => b.length - a.length)[0];\n  } else {\n    const main = body.match(/<main\\b[\\s\\S]*?<\\/main>/i);\n    if (main) candidate = main[0];\n  }\n  let text = candidate ? htmlToText(candidate) : '';\n\n  // Fallback: zbierz akapity <p> z całej strony\n  if (wordCount(text) < 150) {\n    const paras = (body.match(/<p\\b[^>]*>[\\s\\S]*?<\\/p>/gi) || [])\n      .map(htmlToText)\n      .filter((p) => wordCount(p) >= 8);\n    const ptext = paras.join('\\n\\n');\n    if (wordCount(ptext) > wordCount(text)) text = ptext;\n  }\n  return {\n    title: title || null,\n    description: description || null,\n    published_at: published || null,\n    language: langMatch ? langMatch[1].slice(0, 2).toLowerCase() : null,\n    text,\n    word_count: wordCount(text),\n  };\n}\n\n// Napisy WebVTT/SRT -> czysty tekst\nfunction subtitlesToText(s) {\n  return String(s || '')\n    .replace(/^WEBVTT.*$/m, '')\n    .replace(/^\\d+\\s*$/gm, '')\n    .replace(/^\\s*\\d{1,2}:\\d{2}(:\\d{2})?[.,]\\d{3}\\s*-->.*$/gm, '')\n    .replace(/<[^>]+>/g, '')\n    .replace(/\\n{2,}/g, '\\n')\n    .split('\\n').map((l) => l.trim()).filter(Boolean)\n    .filter((l, i, arr) => l !== arr[i - 1])\n    .join(' ')\n    .trim();\n}\n\nconst TRACKING_PARAMS = /^(utm_[a-z]+|fbclid|gclid|mc_cid|mc_eid|ref|ref_src|source|cmpid|igshid|si|_hsenc|_hsmi|mkt_tok)$/i;\n\nfunction canonicalUrl(raw) {\n  try {\n    const u = new URL(String(raw).trim());\n    u.hash = '';\n    u.hostname = u.hostname.toLowerCase().replace(/^www\\./, '');\n    const keep = [];\n    u.searchParams.forEach((v, k) => { if (!TRACKING_PARAMS.test(k)) keep.push([k, v]); });\n    keep.sort((a, b) => a[0].localeCompare(b[0]));\n    u.search = keep.length ? '?' + keep.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&') : '';\n    if (u.hostname === 'youtube.com' || u.hostname === 'm.youtube.com') {\n      const v = new URL(String(raw)).searchParams.get('v');\n      if (v) return `https://youtube.com/watch?v=${v}`;\n    }\n    if (u.hostname === 'youtu.be') return `https://youtube.com/watch?v=${u.pathname.slice(1)}`;\n    if (u.pathname.length > 1 && u.pathname.endsWith('/')) u.pathname = u.pathname.replace(/\\/+$/, '');\n    return u.toString().replace(/^http:\\/\\//, 'https://');\n  } catch (e) {\n    return String(raw || '').trim();\n  }\n}\n\n// SHA-256 (czysty JS) — n8n Cloud nie zawsze udostępnia moduł crypto\nfunction sha256(ascii) {\n  const utf8 = unescape(encodeURIComponent(String(ascii)));\n  const K = [];\n  const H = [];\n  let primeCounter = 0;\n  const isComposite = {};\n  for (let candidate = 2; primeCounter < 64; candidate++) {\n    if (!isComposite[candidate]) {\n      for (let i = candidate * candidate; i < 313; i += candidate) isComposite[i] = candidate;\n      if (primeCounter < 8) H[primeCounter] = (Math.pow(candidate, 0.5) * 0x100000000) | 0;\n      K[primeCounter++] = (Math.pow(candidate, 1 / 3) * 0x100000000) | 0;\n    }\n  }\n  const words = [];\n  const bitLen = utf8.length * 8;\n  let s = utf8 + '\\x80';\n  while ((s.length % 64) - 56) s += '\\x00';\n  for (let i = 0; i < s.length; i++) words[i >> 2] |= s.charCodeAt(i) << (((3 - i) % 4) * 8);\n  words[words.length] = (bitLen / 0x100000000) | 0;\n  words[words.length] = bitLen | 0;\n  const rr = (v, n) => (v >>> n) | (v << (32 - n));\n  let hash = H.slice(0, 8);\n  for (let j = 0; j < words.length;) {\n    const w = words.slice(j, (j += 16));\n    const old = hash;\n    hash = hash.slice(0, 8);\n    for (let i = 0; i < 64; i++) {\n      const w15 = w[i - 15], w2 = w[i - 2];\n      const a = hash[0], e = hash[4];\n      const t1 = hash[7] + (rr(e, 6) ^ rr(e, 11) ^ rr(e, 25)) + ((e & hash[5]) ^ (~e & hash[6])) + K[i] +\n        (w[i] = i < 16 ? w[i] : (w[i - 16] + (rr(w15, 7) ^ rr(w15, 18) ^ (w15 >>> 3)) + w[i - 7] +\n          (rr(w2, 17) ^ rr(w2, 19) ^ (w2 >>> 10))) | 0);\n      const t2 = (rr(a, 2) ^ rr(a, 13) ^ rr(a, 22)) + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));\n      hash = [(t1 + t2) | 0].concat(hash);\n      hash[4] = (hash[4] + t1) | 0;\n    }\n    for (let i = 0; i < 8; i++) hash[i] = (hash[i] + old[i]) | 0;\n  }\n  let out = '';\n  for (let i = 0; i < 8; i++) for (let j = 3; j + 1; j--) {\n    const b = (hash[i] >> (j * 8)) & 255;\n    out += (b < 16 ? '0' : '') + b.toString(16);\n  }\n  return out;\n}\n// ---- /lib/text.cjs ----\n// Jeśli węzeł \"Transcript API (optional)\" jest wyłączony, przychodzą tu niezmienione elementy\n// (bez pola content) — materiały YouTube zostaną oznaczone jako niekompletne.\nconst P = $('Load config').first().json.pipeline || {};\nconst minP = P.min_words_partial || 80;\nconst reqs = $('Transcript list').all().map((i) => i.json);\nconst resps = $input.all();\nconst results = reqs.map((rq, idx) => {\n  const r = resps[idx] ? resps[idx].json : {};\n  const text = typeof r.content === 'string' ? r.content\n    : Array.isArray(r.content) ? r.content.map((c) => c.text).join(' ') : '';\n  const words = wordCount(text);\n  if (words >= minP) return { id: rq.id, status: 'extracted', transcript: truncate(text, 80000), word_count: words, language: r.lang || null, metadata: { content_basis: 'youtube_transcript' } };\n  if (r.error) return { id: rq.id, status: rq.attempts >= 3 ? 'incomplete' : 'failed', error: String(r.error.message || JSON.stringify(r.error)).slice(0, 1000) };\n  return { id: rq.id, status: 'incomplete', error: 'Brak transkrypcji (włącz węzeł \"Transcript API (optional)\" w WF02)' };\n});\nreturn [{ json: { p_results: results } }];\n"
+      }
+    },
+    {
+      "id": "08ef5e02-b60a-46d2-a0e6-6f165114cb57",
+      "position": [
+        1680,
+        270
+      ],
+      "name": "Save transcripts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-PROJECT-REF.supabase.co/rest/v1/rpc/apply_extraction_results",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}"
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "REPLACE_SUPABASE_CRED",
+          "name": "NEWSFLOW Supabase"
+        }
+      }
+    },
+    {
+      "id": "768425ab-09bb-45b4-acd5-0be3d7831a3e",
+      "name": "Opis",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -260
+      ],
+      "parameters": {
+        "content": "## WF02 – Content Extractor\nCo 2 h (:20): pobiera paczkę `pending` (`claim_items_for_extraction`), decyduje skąd wziąć treść: z feedu, ze strony (ekstrakcja artykułu), z transkrypcji podcastu lub (opcjonalnie) z API transkrypcji YouTube.\nZbyt mała treść ⇒ `incomplete` (NIE jest streszczana). Błąd ⇒ `failed` (max 3 próby).\nWęzeł **Transcript API (optional)** jest wyłączony — bez niego filmy YouTube trafiają jako `incomplete`.",
+        "width": 720,
+        "height": 220
+      }
+    }
+  ],
+  "connections": {
+    "Every 2 hours": {
+      "main": [
+        [
+          {
+            "node": "Load config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run manually": {
+      "main": [
+        [
+          {
+            "node": "Load config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load config": {
+      "main": [
+        [
+          {
+            "node": "Claim items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim items": {
+      "main": [
+        [
+          {
+            "node": "Route items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route items": {
+      "main": [
+        [
+          {
+            "node": "Done list",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch list",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Transcript list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Done list": {
+      "main": [
+        [
+          {
+            "node": "Save ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch list": {
+      "main": [
+        [
+          {
+            "node": "Fetch page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch page": {
+      "main": [
+        [
+          {
+            "node": "Extract pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract pages": {
+      "main": [
+        [
+          {
+            "node": "Save extracted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcript list": {
+      "main": [
+        [
+          {
+            "node": "Transcript API (optional)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcript API (optional)": {
+      "main": [
+        [
+          {
+            "node": "Apply transcripts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply transcripts": {
+      "main": [
+        [
+          {
+            "node": "Save transcripts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Warsaw",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
