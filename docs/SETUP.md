@@ -40,7 +40,14 @@ Kolejność: **1 Supabase → 2 OpenAI → 3 ElevenLabs → 4 Gmail → 5 n8n �
 ## 2. OpenAI
 
 1. <https://platform.openai.com/api-keys> → *Create new secret key* (projekt „newsflow”, uprawnienia: *All* lub *Restricted* z dostępem do Chat Completions i Embeddings).
-2. **Settings → Limits**: ustaw *monthly budget* (np. 15 USD) — to druga linia obrony obok limitów w `app_config.limits`.
+2. **Limity — dwie różne rzeczy:**
+   - **Rate limits (TPM/RPM)** na stronie *Limits* to limit *szybkości*, nie wydatków. OpenAI wlicza do TPM także
+     `max_completion_tokens`, więc przy niskim tierze (np. 10 000 TPM) pojedyncze wywołanie briefingu (WF04, ~20 tys.
+     tokenów wejścia) zostanie odrzucone. Tier i limity rosną po pierwszej wpłacie — sprawdź limity dla `gpt-5`
+     i `gpt-5-mini` na stronie *Limits* przed uruchomieniem.
+   - **Limit wydatków:** najprościej prepaid (*Billing → Add credits*) **bez auto-doładowania** — po wyczerpaniu środków
+     API przestaje działać. Jeśli w ustawieniach projektu masz *budget*, ustaw go dodatkowo. Niezależnie od tego
+     workflow pilnują limitów z `app_config.limits`.
 3. Modele są w `app_config.models` (`gpt-5-mini` analiza, `gpt-5` briefing, `gpt-5-mini` scenariusz, `text-embedding-3-small`).
    Zmienisz je bez ruszania workflow:
    ```sql
