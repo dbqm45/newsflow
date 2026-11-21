@@ -27,8 +27,11 @@ Kolejność: **1 Supabase → 2 OpenAI → 3 ElevenLabs → 4 Gmail → 5 n8n �
    set value = jsonb_set(value, '{email_to}', '"TWOJ_EMAIL"')
    where key = 'delivery';
    ```
-7. **Project Settings → API Keys** — zanotuj:
-   - **Project URL** `https://<ref>.supabase.co` → do n8n (build) i iOS,
+7. Zanotuj adres projektu i klucze:
+   - **Project URL** `https://<ref>.supabase.co` → do n8n (build) i iOS. Nie ma go na stronie API Keys. Znajdziesz go:
+     przyciskiem **Connect** na górze panelu projektu, w **Project Settings → Data API** (pole *API URL*) albo złożysz sam
+     z **Project ID** (Project Settings → General): `https://<Project ID>.supabase.co`.
+   - **Project Settings → API Keys:**
    - **Publishable key** `sb_publishable_…` → tylko do aplikacji iOS,
    - **Secret key** `sb_secret_…` → tylko do n8n. Nigdy do aplikacji ani repozytorium.
 8. **Kopie zapasowe:** plan Free nie ma automatycznych backupów do przywrócenia z panelu — raz w tygodniu
